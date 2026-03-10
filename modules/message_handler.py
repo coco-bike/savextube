@@ -20,9 +20,11 @@ class TelegramMessageHandler:
         初始化消息处理器
         
         Args:
-            bot_instance: SaveXTubeBot 实例
+            bot_instance: TelegramBot 实例
         """
         self.bot = bot_instance
+        # 获取 VideoDownloader 实例（batch_processor 在它里面）
+        self.downloader = bot_instance.downloader if hasattr(bot_instance, 'downloader') else None
     
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """处理文本消息（支持批量链接）"""
@@ -68,12 +70,14 @@ class TelegramMessageHandler:
         # 异步处理下载
         if len(urls) == 1:
             # 单个链接，使用原有方法
+            logger.info(f"📥 单个链接，使用标准下载：{urls[0]}")
             import asyncio
             asyncio.create_task(
                 self.bot._process_download_async(update, context, urls[0], status_message)
             )
         else:
             # 多个链接，使用批量下载
+            logger.info(f"🚀 多个链接（{len(urls)}个），使用批量并发下载：{urls}")
             import asyncio
             asyncio.create_task(
                 self._process_batch_download_async(update, context, urls, status_message)
@@ -130,7 +134,8 @@ class TelegramMessageHandler:
     ):
         """异步处理批量下载"""
         try:
-            if not hasattr(self.bot, 'batch_processor') or not self.bot.batch_processor:
+            # 检查 batch_processor（在 VideoDownloader 中）
+            if not self.downloader or not hasattr(self.downloader, 'batch_processor') or not self.downloader.batch_processor:
                 await status_message.edit_text("❌ 批量下载功能未初始化")
                 return
             
@@ -142,9 +147,9 @@ class TelegramMessageHandler:
                     logger.warning(f"更新进度消息失败：{e}")
             
             # 执行批量下载
-            results = await self.bot.batch_processor.download_batch(
+            results = await self.downloader.batch_processor.download_batch(
                 urls=urls,
-                get_ydl_opts_func=self.bot._get_ydl_opts_for_url,
+                get_ydl_opts_func=lambda url: self.downloader._get_ydl_opts(url) if hasattr(self.downloader, '_get_ydl_opts') else {},
                 progress_callback=progress_callback
             )
             
