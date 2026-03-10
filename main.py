@@ -20772,7 +20772,7 @@ async def main():
 
     # 网络连接测试和健康检查
     logger.info("🔍 开始网络连接测试...")
-    if not await test_network_connectivity():
+    if not await test_network_connectivity(proxy_config.get("proxy_host")):
         logger.warning("⚠️ 网络连接测试失败，但将继续尝试启动")
         # 不要直接退出，继续尝试启动，可能是测试URL的问题
 
