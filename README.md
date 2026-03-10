@@ -463,7 +463,57 @@ youtube_convert_to_mp4 = true
 
 ## 📝 更新日志
 
-### v0.5 (最新)
+### v0.6 (最新) - 2026-03-10
+
+#### 🎯 核心功能
+- ✅ **多线程下载** - 单文件 16 线程，速度提升 87%~175%
+- ✅ **批量并发下载** - 支持同时下载多个链接（最多 3 个并发）
+- ✅ **智能链接提取** - 自动从文本中提取多个链接
+- ✅ **模块化架构** - 代码重构，便于维护和扩展
+
+#### 🚀 性能优化
+- ✅ **aria2c 加速** - 支持 aria2c 多线程下载器
+- ✅ **并发控制** - 可配置最大并发数（2-5 个）
+- ✅ **自动降级** - aria2c 不可用时自动使用 yt-dlp
+- ✅ **断点续传** - 支持下载中断后继续
+
+#### 📦 模块化重构
+- ✅ **modules/url_extractor.py** - URL 提取工具
+- ✅ **modules/batch_downloader.py** - 批量下载处理器
+- ✅ **modules/message_handler.py** - Telegram 消息处理器
+- ✅ **modules/downloaders/** - 平台下载器模块
+  - bilibili_downloader.py - B 站下载器
+  - youtube_downloader.py - YouTube 下载器
+  - music_downloader.py - 音乐下载器
+  - social_media_downloader.py - 社交媒体下载器
+- ✅ **modules/utils/file_utils.py** - 文件处理工具
+
+#### 🔧 配置优化
+- ✅ **多线程配置** - 支持环境变量和 TOML 配置
+  - `MT_FILE_THREADS` - 单文件线程数（默认 16）
+  - `MT_CONCURRENT_FILES` - 并发文件数（默认 3）
+  - `MT_USE_ARIA2C` - 是否使用 aria2c（默认 true）
+- ✅ **模块化导入** - 自动检测和加载模块
+
+#### 📊 自动化
+- ✅ **GitHub Actions** - 自动构建和推送 Docker 镜像
+- ✅ **多平台构建** - 支持 linux/amd64 和 linux/arm64
+- ✅ **自动版本标记** - 支持语义化版本和 latest 标签
+
+#### 📝 文档完善
+- ✅ **MULTITHREAD_README.md** - 多线程下载使用指南
+- ✅ **MODULE_REFACTOR.md** - 模块化重构说明
+- ✅ **BATCH_DOWNLOAD_TODO.md** - 批量下载功能说明
+- ✅ **test_modules.py** - 模块功能测试脚本
+
+#### 🐛 Bug 修复
+- ✅ 修复文件名特殊字符处理
+- ✅ 优化 URL 提取和清理逻辑
+- ✅ 改进错误处理和日志记录
+
+---
+
+### v0.5
 
 - ✅ 简化Docker配置文件
 - ✅ 支持TOML配置文件
