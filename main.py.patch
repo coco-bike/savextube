@@ -1,0 +1,13 @@
+--- a/main.py
++++ b/main.py
+@@ -15720,6 +15720,26 @@ class SaveXTubeBot:
+ 
+     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+         """处理文本消息，主要是视频链接"""
++        # 批量链接处理支持
++        if hasattr(self, 'multithread_downloader') and self.multithread_downloader:
++            return await self._handle_batch_message(update, context)
++        
+         user_id = update.message.from_user.id
+ 
+         # 权限检查
