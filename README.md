@@ -289,8 +289,8 @@ services:
       # 重启容器
       - /var/run/docker.sock:/var/run/docker.sock
       
-      # Cookies 目录（只读挂载）
-      - /vol1/1000/docker/SaveXTube/cookies/:/app/cookies:ro
+      # Cookies 目录
+      - /vol1/1000/docker/SaveXTube/cookies/:/app/cookies
       
       # 配置文件目录
       - /vol1/1000/docker/SaveXTube/config:/app/config
