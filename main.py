@@ -90,7 +90,22 @@ except ImportError:
     DownloadConfig = None
     create_downloader = None
     MULTITHREAD_ENABLED = False
-    logger.warning("⚠️ 多线程下载模块未加载，将使用标准下载模式")
+    logger.warning("⚠️ 多线程下载模块未加载")
+
+# 导入模块化下载器
+try:
+    from modules.downloaders.bilibili_downloader import BilibiliDownloader, is_bilibili_url
+    from modules.downloaders.youtube_downloader import YouTubeDownloader, is_youtube_url
+    from modules.downloaders.music_downloader import MusicDownloader, is_music_platform
+    from modules.downloaders.social_media_downloader import SocialMediaDownloader, is_social_media_url
+    MODULES_ENABLED = True
+except ImportError as e:
+    logger.warning(f"⚠️ 模块化下载器导入失败：{e}")
+    BilibiliDownloader = None
+    YouTubeDownloader = None
+    MusicDownloader = None
+    SocialMediaDownloader = None
+    MODULES_ENABLED = False
 
 # 网络错误处理相关导入
 import httpx
@@ -1999,6 +2014,26 @@ class VideoDownloader:
         else:
             self.multithread_downloader = None
             self.batch_processor = None
+        
+        # 初始化模块化下载器（如果可用）
+        if MODULES_ENABLED:
+            try:
+                self.bilibili_downloader = BilibiliDownloader(self)
+                self.youtube_downloader = YouTubeDownloader(self)
+                self.music_downloader = MusicDownloader(self)
+                self.social_downloader = SocialMediaDownloader(self)
+                logger.info("✅ 模块化下载器初始化成功")
+            except Exception as e:
+                logger.error(f"❌ 模块化下载器初始化失败：{e}")
+                self.bilibili_downloader = None
+                self.youtube_downloader = None
+                self.music_downloader = None
+                self.social_downloader = None
+        else:
+            self.bilibili_downloader = None
+            self.youtube_downloader = None
+            self.music_downloader = None
+            self.social_downloader = None
         
         # 初始化 Instagram 下载器
         try:
