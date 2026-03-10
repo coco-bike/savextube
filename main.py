@@ -20695,9 +20695,18 @@ class GlobalProgressManager:
 global_progress_manager = GlobalProgressManager()
 
 
-async def test_network_connectivity():
+async def test_network_connectivity(proxy_host: str = None):
     """测试网络连接性"""
     import httpx
+    # 配置代理
+    proxies = {}
+    if proxy_host:
+        proxies = {
+            "http://": proxy_host,
+            "https://": proxy_host
+        }
+        logger.info(f"🌐 网络测试使用代理：{proxy_host}")
+
     test_urls = [
         "https://api.telegram.org",
         "https://www.google.com",
@@ -20706,7 +20715,7 @@ async def test_network_connectivity():
 
     for url in test_urls:
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=10.0, proxies=proxies if proxy_host else None) as client:
                 response = await client.get(url)
                 if response.status_code == 200:
                     logger.debug(f"🟢 网络连接测试成功: {url}")
