@@ -50,3 +50,18 @@ log_to_file = true
 [youtube]
 # YouTube 配置
 youtube_convert_to_mp4 = true
+
+[multithread]
+# 多线程下载配置
+# 单个文件的下载线程数（推荐 8-32）
+mt_file_threads = 16
+# 同时下载的文件数量（推荐 2-5）
+mt_concurrent_files = 3
+# 是否使用 aria2c 加速器（true/false）
+mt_use_aria2c = true
+# aria2c 服务器连接数（推荐 8-16）
+mt_aria2c_connections = 16
+# 每个服务器的分片数（推荐 8-16）
+mt_aria2c_splits = 16
+# 下载速度限制（0 表示不限制），格式：500K, 1M, 10M
+mt_speed_limit = "0"

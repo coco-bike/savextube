@@ -81,6 +81,17 @@ import signal
 import gc
 from concurrent.futures import ThreadPoolExecutor
 
+# 导入多线程下载增强模块
+try:
+    from multithread_downloader import MultiThreadDownloader, DownloadConfig, create_downloader
+    MULTITHREAD_ENABLED = True
+except ImportError:
+    MultiThreadDownloader = None
+    DownloadConfig = None
+    create_downloader = None
+    MULTITHREAD_ENABLED = False
+    logger.warning("⚠️ 多线程下载模块未加载，将使用标准下载模式")
+
 # 网络错误处理相关导入
 import httpx
 from telegram.error import NetworkError, TimedOut, RetryAfter
@@ -1955,6 +1966,26 @@ class VideoDownloader:
         self.instagram_cookies_path = instagram_cookies_path
         self.apple_music_cookies_path = os.environ.get("APPLEMUSIC_COOKIES") or os.environ.get("APPLEMUSIC_COOKIE_FILE") or "/app/cookies/apple_music_cookies.txt"
         self.proxy_host = os.environ.get("PROXY_HOST")
+        
+        # 初始化多线程下载器
+        if MULTITHREAD_ENABLED:
+            try:
+                # 从环境变量读取配置
+                mt_threads = int(os.environ.get("MT_FILE_THREADS", "16"))
+                mt_concurrent = int(os.environ.get("MT_CONCURRENT_FILES", "3"))
+                mt_use_aria2c = os.environ.get("MT_USE_ARIA2C", "true").lower() == "true"
+                
+                self.multithread_downloader = create_downloader(
+                    file_threads=mt_threads,
+                    concurrent_files=mt_concurrent,
+                    use_aria2c=mt_use_aria2c
+                )
+                logger.info(f"✅ 多线程下载器初始化成功（线程数：{mt_threads}, 并发数：{mt_concurrent}, aria2c: {mt_use_aria2c}）")
+            except Exception as e:
+                logger.error(f"❌ 多线程下载器初始化失败：{e}")
+                self.multithread_downloader = None
+        else:
+            self.multithread_downloader = None
         
         # 初始化 Instagram 下载器
         try:
