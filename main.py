@@ -498,6 +498,12 @@ def _escape_markdown_v2(text: str) -> str:
     return escaped_text
 
 # 配置增强的日志系统
+# 导入模块化工具
+from modules.url_extractor import URLExtractor
+from modules.batch_downloader import BatchDownloadProcessor
+from modules.message_handler import TelegramMessageHandler
+
+
 def setup_logging():
     """配置增强的日志系统，支持远程NAS目录"""
     # 从环境变量获取日志配置
@@ -1970,7 +1976,6 @@ class VideoDownloader:
         # 初始化多线程下载器
         if MULTITHREAD_ENABLED:
             try:
-                # 从环境变量读取配置
                 mt_threads = int(os.environ.get("MT_FILE_THREADS", "16"))
                 mt_concurrent = int(os.environ.get("MT_CONCURRENT_FILES", "3"))
                 mt_use_aria2c = os.environ.get("MT_USE_ARIA2C", "true").lower() == "true"
@@ -1980,12 +1985,20 @@ class VideoDownloader:
                     concurrent_files=mt_concurrent,
                     use_aria2c=mt_use_aria2c
                 )
-                logger.info(f"✅ 多线程下载器初始化成功（线程数：{mt_threads}, 并发数：{mt_concurrent}, aria2c: {mt_use_aria2c}）")
+                logger.info(f"✅ 多线程下载器初始化成功（线程数：{mt_threads}, 并发数：{mt_concurrent}）")
+                
+                # 初始化批量下载处理器
+                self.batch_processor = BatchDownloadProcessor(
+                    self.multithread_downloader,
+                    max_concurrent=mt_concurrent
+                )
             except Exception as e:
                 logger.error(f"❌ 多线程下载器初始化失败：{e}")
                 self.multithread_downloader = None
+                self.batch_processor = None
         else:
             self.multithread_downloader = None
+            self.batch_processor = None
         
         # 初始化 Instagram 下载器
         try:
@@ -14285,6 +14298,14 @@ class TelegramBot:
         self.application = None
         self.bot_id = None
         self.qbit_client = None
+        
+        # 初始化消息处理器
+        try:
+            self.message_handler = TelegramMessageHandler(self)
+            logger.info("✅ 消息处理器初始化成功")
+        except Exception as e:
+            logger.error(f"❌ 消息处理器初始化失败：{e}")
+            self.message_handler = None
 
         # 初始化配置管理器（仅使用数据库）
         try:
@@ -15719,16 +15740,19 @@ class TelegramBot:
             await update.message.reply_text(f"❌ 获取状态失败: {str(e)}")
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """处理文本消息，主要是视频链接"""
+        """处理文本消息，支持批量链接（委托给消息处理器）"""
+        if hasattr(self, 'message_handler') and self.message_handler:
+            await self.message_handler.handle_message(update, context)
+        else:
+            # 兼容旧版本
+            await self._handle_message_legacy(update, context)
+    
+    async def _handle_message_legacy(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """旧版消息处理（兼容）"""
         user_id = update.message.from_user.id
-
-        # 权限检查
         if not self._check_user_permission(user_id):
             await update.message.reply_text("❌ 您没有权限使用此机器人")
             return
-
-        # 更新心跳
-        # 心跳更新已删除
 
         message = update.message
         url = None
