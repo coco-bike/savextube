@@ -18,7 +18,7 @@ on:
 
 env:
   REGISTRY: docker.io
-  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/savextube
+  IMAGE_NAME: sbkdockerhub/savextube
 
 jobs:
   build-and-push:
