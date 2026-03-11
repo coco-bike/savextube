@@ -517,6 +517,7 @@ def _escape_markdown_v2(text: str) -> str:
 from modules.url_extractor import URLExtractor
 from modules.batch_downloader import BatchDownloadProcessor
 from modules.message_handler import TelegramMessageHandler
+from modules.media_batch_processor import MediaBatchProcessor
 
 
 def setup_logging():
@@ -14342,6 +14343,14 @@ class TelegramBot:
             logger.error(f"❌ 消息处理器初始化失败：{e}")
             self.message_handler = None
 
+        # 初始化媒体批量下载处理器
+        try:
+            self.media_batch_processor = MediaBatchProcessor(self, max_concurrent=3, timeout=3.0)
+            logger.info("✅ 媒体批量下载处理器初始化成功")
+        except Exception as e:
+            logger.error(f"❌ 媒体批量处理器初始化失败：{e}")
+            self.media_batch_processor = None
+
         # 初始化配置管理器（仅使用数据库）
         try:
             self.config_manager = ConfigManager("/app/db/savextube.db")
@@ -15244,6 +15253,11 @@ class TelegramBot:
             telegram_logger = logging.getLogger(logger_name)
             telegram_logger.name = 'savextube'
 
+        # 启动媒体批量下载处理器
+        if self.media_batch_processor:
+            self.media_batch_processor.start()
+            logger.info("🚀 媒体批量下载处理器已启动")
+        
         logger.info("启动 Telegram Bot (PTB)...")
 
         # 创建应用程序实例
@@ -19990,6 +20004,90 @@ class TelegramBot:
             return self.download_tasks[task_id]["cancelled"]
         return False
 
+
+    async def _process_telethon_media_download(self, update, context, message, status_message, attachment):
+        """
+        简化的 Telethon 媒体下载方法（供批量处理器调用）
+        省略了权限检查和初始化检查，直接执行下载
+        """
+        import re
+        from telethon.tl.types import MessageMediaDocument, MessageMediaPhoto
+        
+        try:
+            # 提取媒体信息
+            file_name = getattr(attachment, 'file_name', 'unknown_file')
+            
+            # 处理.torrent 文件
+            if file_name and file_name.lower().endswith('.torrent'):
+                logger.info(f"🔗 检测到种子文件：{file_name}")
+                await status_message.edit_text("🔗 正在处理种子文件...")
+                try:
+                    file_path = await context.bot.get_file(attachment.file_id)
+                    torrent_data = await file_path.download_as_bytearray()
+                    success = await self.add_torrent_file_to_qb(torrent_data, file_name)
+                    if success:
+                        await status_message.edit_text("✅ 种子文件已成功添加到 qBittorrent！")
+                    else:
+                        await status_message.edit_text("❌ 添加到 qBittorrent 失败！")
+                except Exception as e:
+                    logger.exception(f"添加种子文件出错：{e}")
+                    await status_message.edit_text(f"❌ 添加种子文件出错：{e}")
+                return
+            
+            # 文件名处理
+            if not file_name or file_name == 'unknown_file':
+                if message.text and message.text.strip():
+                    file_name = message.text.strip().replace(' ', '_')
+                else:
+                    file_name = 'unknown_file'
+            
+            file_size = getattr(attachment, 'file_size', 0)
+            file_unique_id = getattr(attachment, 'file_unique_id', 'unknown_id')
+            
+            logger.info(f"📥 开始下载媒体：{file_name} ({file_size / (1024*1024):.2f} MB)")
+            await status_message.edit_text(f"📥 正在下载：{file_name}\n⏳ 文件大小：{file_size / (1024*1024):.2f} MB")
+            
+            # 调用 Telethon 下载
+            media_message = None
+            async for m in self.user_client.iter_messages(
+                await self.user_client.get_entity(self.bot_id),
+                limit=1,
+                search=file_unique_id
+            ):
+                if getattr(m, 'file_unique_id', None) == file_unique_id:
+                    media_message = m
+                    break
+            
+            if not media_message:
+                # 尝试通过文件名查找
+                async for m in self.user_client.iter_messages(
+                    await self.user_client.get_entity(self.bot_id),
+                    limit=50
+                ):
+                    if hasattr(m, 'media') and isinstance(m.media, (MessageMediaDocument, MessageMediaPhoto)):
+                        doc = m.document if hasattr(m, 'document') else None
+                        if doc and getattr(doc, 'file_reference', None):
+                            media_message = m
+                            break
+            
+            if not media_message:
+                await status_message.edit_text("❌ 无法在 Telethon 中找到匹配的媒体文件")
+                return
+            
+            # 下载文件
+            download_path = await self.user_client.download_media(
+                media_message,
+                file='/downloads/telegram/'
+            )
+            
+            logger.info(f"✅ 下载完成：{download_path}")
+            await status_message.edit_text(f"✅ 下载完成！\n📁 {download_path}")
+            
+        except Exception as e:
+            logger.error(f"❌ 下载失败：{e}", exc_info=True)
+            await status_message.edit_text(f"❌ 下载失败：{str(e)}")
+            raise
+
     async def download_user_media(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
         通过 Telethon 处理用户发送或转发的媒体文件，以支持大文件下载。
@@ -20008,6 +20106,19 @@ class TelegramBot:
         if not self.user_client:
             await message.reply_text("❌ 媒体下载功能未启用（Telethon 未配置），请联系管理员。")
             return
+        
+        # 检查是否启用了批量处理器
+        if self.media_batch_processor:
+            # 使用批量队列处理
+            status_message = await message.reply_text("📥 已加入下载队列，请稍候...")
+            await self.media_batch_processor.add_to_queue(
+                update, context, message, status_message, message.effective_attachment
+            )
+            logger.info(f"📥 媒体文件已加入批量队列 | 队列长度：{self.media_batch_processor.queue.qsize()}")
+            return
+        else:
+            # 降级：直接处理（旧版行为）
+            logger.warning("⚠️ 媒体批量处理器未启用，使用直接处理模式")
 
         # --- 紧急修复: 确保 self.bot_id 已设置 ---
         if not self.bot_id:

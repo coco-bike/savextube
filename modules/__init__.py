@@ -17,3 +17,7 @@ try:
     __all__ = ['URLExtractor', 'BatchDownloadProcessor', 'TelegramMessageHandler']
 except ImportError:
     __all__ = ['URLExtractor', 'BatchDownloadProcessor']
+
+# 媒体批量下载处理器
+from .media_batch_processor import MediaBatchProcessor
+__all__ = ['MediaBatchProcessor']
