@@ -1,5 +1,9 @@
 # SaveXTube - 智能多媒体下载机器人
 
+> **原项目地址**：[renlixing87/savextube](https://github.com/renlixing87/savextube)
+> 
+> 感谢原作者的开源贡献！本项目基于原版本进行功能增强和优化。
+
 SaveXTube 是一个基于 Telegram 的智能多媒体下载工具，支持视频、音乐、磁力链接等多种内容下载，特别针对 NAS 环境进行了优化。
 
 ## 🚀 核心功能
@@ -565,23 +569,7 @@ youtube_convert_to_mp4 = true
 - ✅ 添加格式自动转换功能
 - ✅ 支持NSFW内容下载
 
-## 🤝 贡献
-
-欢迎提交Issue和Pull Request来帮助改进SaveXTube！
-
-### ☕ 请作者喝杯咖啡
-
-<img src="wechat_pay_qr.jpg" alt="微信支付收款码" width="300">
-
-如果这个项目对您有帮助，欢迎请作者喝杯咖啡 ☕
-
-## 💬 交流与支持
-
-### 🔗 社区交流
-
-- **Telegram群组**: (https://t.me/savextube)
-
-⭐ **如果这个项目对您有帮助，请给个Star支持一下！** ⭐
+⭐ **如果这个项目对您有帮助，请给个 Star 支持一下！** ⭐
 
 ---
 
