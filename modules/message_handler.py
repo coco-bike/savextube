@@ -105,7 +105,7 @@ class TelegramMessageHandler:
                         urls.append(entity.url)
         
         # 检查转发消息
-        if not urls and message.forward_from_chat and message.text:
+        if not urls and hasattr(message, 'forward_from_chat') and message.forward_from_chat and message.text:
             urls = URLExtractor.extract_all_urls(message.text)
         
         # 检查回复消息

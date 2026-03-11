@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SaveXTube - 下载任务</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-plus/dist/index.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; }
+        .app-container { display: flex; min-height: 100vh; }
+        .sidebar { width: 240px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px 0; }
+        .sidebar .logo { text-align: center; padding: 20px; font-size: 24px; font-weight: bold; }
+        .sidebar .menu { margin-top: 30px; }
+        .sidebar .menu-item { padding: 15px 25px; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; gap: 10px; }
+        .sidebar .menu-item:hover, .sidebar .menu-item.active { background: rgba(255,255,255,0.2); }
+        .main-content { flex: 1; padding: 30px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .header h1 { font-size: 28px; color: #333; }
+        .content-section { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); margin-bottom: 20px; }
+        .section-title { font-size: 18px; font-weight: bold; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .tabs { margin-bottom: 20px; }
+        .task-list { max-height: 600px; overflow-y: auto; }
+        .task-item { padding: 15px; border: 1px solid #e8e8e8; border-radius: 8px; margin-bottom: 15px; }
+        .task-item .task-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .task-item .task-title { font-size: 15px; font-weight: bold; color: #333; }
+        .task-item .task-status { padding: 4px 12px; border-radius: 12px; font-size: 12px; }
+        .task-item .task-status.success { background: #f0f9eb; color: #67c23a; }
+        .task-item .task-status.processing { background: #ecf5ff; color: #409eff; }
+        .task-item .task-status.error { background: #fef0f0; color: #f56c6c; }
+        .task-item .task-status.pending { background: #fdf6ec; color: #e6a23c; }
+        .task-item .task-info { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; font-size: 13px; color: #666; margin-bottom: 10px; }
+        .task-item .progress-bar { height: 6px; background: #f0f0f0; border-radius: 3px; overflow: hidden; }
+        .task-item .progress-bar .progress { height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); transition: width 0.3s; }
+        .task-item .task-actions { margin-top: 12px; display: flex; gap: 10px; }
+        .empty-state { text-align: center; padding: 60px 20px; color: #999; }
+        .empty-state .icon { font-size: 64px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边栏 -->
+        <div class="sidebar">
+            <div class="logo">🎵 SaveXTube</div>
+            <div class="menu">
+                <div class="menu-item" @click="currentPage = 'dashboard'">
+                    <span>📊</span> 仪表盘
+                </div>
+                <div class="menu-item" @click="currentPage = 'playlists'">
+                    <span>📀</span> 歌单管理
+                </div>
+                <div class="menu-item" @click="currentPage = 'search'">
+                    <span>🔍</span> TG 频道搜索
+                </div>
+                <div class="menu-item active" @click="currentPage = 'tasks'">
+                    <span>📥</span> 下载任务
+                </div>
+                <div class="menu-item" @click="currentPage = 'settings'">
+                    <span>⚙️</span> 系统设置
+                </div>
+                <div class="menu-item" @click="currentPage = 'setup'">
+                    <span>🔧</span> Setup
+                </div>
+                <div class="menu-item" @click="logout" style="margin-top: 50px; border-top: 1px solid rgba(255,255,255,0.2);">
+                    <span>🚪</span> 退出登录
+                </div>
+            </div>
+        </div>
+
+        <!-- 主内容区 -->
+        <div class="main-content">
+            <div class="header">
+                <h1>📥 下载任务</h1>
+                <div>
+                    <el-button size="small" @click="refreshTasks">🔄 刷新</el-button>
+                    <el-button size="small" type="danger" @click="clearCompleted">清除已完成</el-button>
+                </div>
+            </div>
+
+            <!-- 选项卡 -->
+            <div class="content-section">
+                <div class="tabs">
+                    <el-radio-group v-model="activeTab" size="large">
+                        <el-radio-button label="all">全部任务</el-radio-button>
+                        <el-radio-button label="processing">进行中</el-radio-button>
+                        <el-radio-button label="completed">已完成</el-radio-button>
+                        <el-radio-button label="failed">失败</el-radio-button>
+                    </el-radio-group>
+                </div>
+
+                <!-- 任务列表 -->
+                <div class="task-list">
+                    <div class="task-item" v-for="task in filteredTasks" :key="task.id">
+                        <div class="task-header">
+                            <span class="task-title">{{ task.title }}</span>
+                            <span class="task-status" :class="'task-status-' + task.statusType">
+                                {{ task.statusText }}
+                            </span>
+                        </div>
+                        <div class="task-info">
+                            <div>📁 类型：{{ task.type }}</div>
+                            <div>🎵 歌曲：{{ task.songs }} 首</div>
+                            <div>⏱️ 耗时：{{ task.duration }}</div>
+                        </div>
+                        <div class="task-info" v-if="task.type === '批量下载'">
+                            <div>📂 来源：{{ task.source }}</div>
+                            <div>🎼 风格：{{ task.style }}</div>
+                            <div>📅 时间：{{ task.startTime }}</div>
+                        </div>
+                        <div class="progress-bar" v-if="task.progress < 100">
+                            <div class="progress" :style="{ width: task.progress + '%' }"></div>
+                        </div>
+                        <div class="task-actions" v-if="task.statusType === 'processing'">
+                            <el-button size="small" @click="pauseTask(task)">暂停</el-button>
+                            <el-button size="small" type="danger" @click="cancelTask(task)">取消</el-button>
+                        </div>
+                        <div class="task-actions" v-if="task.statusType === 'completed'">
+                            <el-button size="small" type="success" @click="openFolder(task)">打开文件夹</el-button>
+                            <el-button size="small" @click="retryTask(task)">重新下载</el-button>
+                        </div>
+                        <div class="task-actions" v-if="task.statusType === 'failed'">
+                            <el-button size="small" type="warning" @click="retryTask(task)">重试</el-button>
+                            <el-button size="small" @click="viewLog(task)">查看日志</el-button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 空状态 -->
+                <div class="empty-state" v-if="filteredTasks.length === 0">
+                    <div class="icon">📥</div>
+                    <p>暂无任务</p>
+                    <p v-if="activeTab === 'all'">去添加第一个下载任务吧</p>
+                    <p v-else-if="activeTab === 'processing'">当前没有进行中的任务</p>
+                    <p v-else-if="activeTab === 'completed'">还没有完成的任务</p>
+                    <p v-else-if="activeTab === 'failed'">太好了，没有失败的任务！</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@3"></script>
+    <script src="https://cdn.jsdelivr.net/npm/element-plus"></script>
+    <script>
+        const { createApp, reactive, ref, computed } = Vue;
+        
+        const app = createApp({
+            setup() {
+                const currentPage = ref('tasks');
+                const activeTab = ref('all');
+                
+                const tasks = ref([
+                    {
+                        id: 1,
+                        title: '我喜欢的音乐 - 汽水音乐',
+                        type: '歌单下载',
+                        source: '汽水音乐',
+                        style: '混合',
+                        songs: 45,
+                        progress: 100,
+                        statusType: 'completed',
+                        statusText: '已完成',
+                        duration: '15 分钟',
+                        startTime: '2026-03-11 10:30'
+                    },
+                    {
+                        id: 2,
+                        title: '抖音热歌榜 - QQ 音乐',
+                        type: '歌单下载',
+                        source: 'QQ 音乐',
+                        style: '网络热歌',
+                        songs: 100,
+                        progress: 65,
+                        statusType: 'processing',
+                        statusText: '下载中',
+                        duration: '8 分钟',
+                        startTime: '2026-03-11 11:20'
+                    },
+                    {
+                        id: 3,
+                        title: '告白气球 - 周杰伦',
+                        type: 'TG 搜索',
+                        source: 'TG 频道',
+                        style: '华语流行',
+                        songs: 1,
+                        progress: 100,
+                        statusType: 'completed',
+                        statusText: '已完成',
+                        duration: '45 秒',
+                        startTime: '2026-03-11 09:15'
+                    },
+                    {
+                        id: 4,
+                        title: '七里香 - 周杰伦',
+                        type: 'TG 搜索',
+                        source: 'TG 频道',
+                        style: '华语流行',
+                        songs: 1,
+                        progress: 0,
+                        statusType: 'failed',
+                        statusText: '下载失败',
+                        duration: '-',
+                        startTime: '2026-03-11 08:30',
+                        error: '未找到无损音源'
+                    }
+                ]);
+                
+                const filteredTasks = computed(() => {
+                    if (activeTab.value === 'all') {
+                        return tasks.value;
+                    }
+                    return tasks.value.filter(t => t.statusType === activeTab.value);
+                });
+                
+                const refreshTasks = () => {
+                    ElementPlus.ElMessage.info('刷新任务列表');
+                    // TODO: 调用 API 刷新
+                };
+                
+                const clearCompleted = () => {
+                    ElementPlus.ElMessageBox.confirm('确定要清除所有已完成的任务吗？', '确认清除', { type: 'warning' })
+                        .then(() => {
+                            tasks.value = tasks.value.filter(t => t.statusType !== 'completed');
+                            ElementPlus.ElMessage.success('已清除已完成任务');
+                        });
+                };
+                
+                const pauseTask = (task) => {
+                    ElementPlus.ElMessage.info(`暂停任务：${task.title}`);
+                };
+                
+                const cancelTask = (task) => {
+                    ElementPlus.ElMessageBox.confirm(`确定要取消任务"${task.title}"吗？`, '确认取消', { type: 'warning' })
+                        .then(() => {
+                            task.statusType = 'failed';
+                            task.statusText = '已取消';
+                            task.progress = 0;
+                        });
+                };
+                
+                const openFolder = (task) => {
+                    ElementPlus.ElMessage.info(`打开文件夹：${task.title}`);
+                };
+                
+                const retryTask = (task) => {
+                    ElementPlus.ElMessage.info(`重试任务：${task.title}`);
+                    task.statusType = 'processing';
+                    task.statusText = '下载中';
+                    task.progress = 0;
+                };
+                
+                const viewLog = (task) => {
+                    ElementPlus.ElMessage.info(`查看日志：${task.title}\n错误：${task.error || '未知'}`);
+                };
+                
+                const logout = () => {
+                    localStorage.removeItem('token');
+                    window.location.href = '/';
+                };
+                
+                return {
+                    currentPage,
+                    activeTab,
+                    tasks,
+                    filteredTasks,
+                    refreshTasks,
+                    clearCompleted,
+                    pauseTask,
+                    cancelTask,
+                    openFolder,
+                    retryTask,
+                    viewLog,
+                    logout
+                };
+            }
+        });
+        
+        app.use(ElementPlus);
+        app.mount('.app-container');
+    </script>
+</body>
+</html>

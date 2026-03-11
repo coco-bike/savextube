@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SaveXTube - 登录</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-plus/dist/index.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .login-container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 400px;
+        }
+        
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .logo h1 {
+            color: #667eea;
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+        
+        .logo p {
+            color: #999;
+            font-size: 14px;
+        }
+        
+        .login-form {
+            margin-top: 20px;
+        }
+        
+        .login-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            height: 45px;
+            font-size: 16px;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            color: #999;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="logo">
+            <h1>🎵 SaveXTube</h1>
+            <p>智能媒体下载管理器</p>
+        </div>
+        
+        <el-form class="login-form" :model="form" @submit.native.prevent="handleLogin">
+            <el-form-item>
+                <el-input
+                    v-model="form.username"
+                    placeholder="用户名"
+                    prefix-icon="User"
+                    size="large"
+                ></el-input>
+            </el-form-item>
+            
+            <el-form-item>
+                <el-input
+                    v-model="form.password"
+                    type="password"
+                    placeholder="密码"
+                    prefix-icon="Lock"
+                    size="large"
+                    @keyup.enter="handleLogin"
+                ></el-input>
+            </el-form-item>
+            
+            <el-form-item>
+                <el-button
+                    type="primary"
+                    class="login-btn"
+                    :loading="loading"
+                    @click="handleLogin"
+                >
+                    登录
+                </el-button>
+            </el-form-item>
+        </el-form>
+        
+        <div class="footer">
+            <p>默认账户：admin / savextube</p>
+            <p>首次登录后请修改密码</p>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/vue@3"></script>
+    <script src="https://cdn.jsdelivr.net/npm/element-plus"></script>
+    <script>
+        const { createApp, reactive, ref } = Vue;
+        
+        const app = createApp({
+            setup() {
+                const form = reactive({
+                    username: '',
+                    password: ''
+                });
+                const loading = ref(false);
+                
+                const handleLogin = async () => {
+                    if (!form.username || !form.password) {
+                        ElementPlus.ElMessage.error('请输入用户名和密码');
+                        return;
+                    }
+                    
+                    loading.value = true;
+                    
+                    try {
+                        const formData = new FormData();
+                        formData.append('username', form.username);
+                        formData.append('password', form.password);
+                        
+                        const response = await fetch('/api/token', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            localStorage.setItem('token', data.access_token);
+                            ElementPlus.ElMessage.success('登录成功');
+                            setTimeout(() => {
+                                window.location.href = '/dashboard';
+                            }, 1000);
+                        } else {
+                            const error = await response.json();
+                            ElementPlus.ElMessage.error(error.detail || '登录失败');
+                        }
+                    } catch (error) {
+                        ElementPlus.ElMessage.error('网络错误，请稍后重试');
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+                
+                return {
+                    form,
+                    loading,
+                    handleLogin
+                };
+            }
+        });
+        
+        app.use(ElementPlus);
+        app.mount('.login-container');
+    </script>
+</body>
+</html>

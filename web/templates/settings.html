@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SaveXTube - 系统设置</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-plus/dist/index.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; }
+        .app-container { display: flex; min-height: 100vh; }
+        .sidebar { width: 240px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px 0; }
+        .sidebar .logo { text-align: center; padding: 20px; font-size: 24px; font-weight: bold; }
+        .sidebar .menu { margin-top: 30px; }
+        .sidebar .menu-item { padding: 15px 25px; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; gap: 10px; }
+        .sidebar .menu-item:hover, .sidebar .menu-item.active { background: rgba(255,255,255,0.2); }
+        .main-content { flex: 1; padding: 30px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .header h1 { font-size: 28px; color: #333; }
+        .content-section { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); margin-bottom: 20px; }
+        .section-title { font-size: 18px; font-weight: bold; margin-bottom: 20px; }
+        .setting-group { margin-bottom: 30px; }
+        .setting-group h3 { font-size: 16px; color: #667eea; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 2px solid #f0f0f0; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        .save-btn { position: fixed; bottom: 30px; right: 30px; z-index: 1000; }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边栏 -->
+        <div class="sidebar">
+            <div class="logo">🎵 SaveXTube</div>
+            <div class="menu">
+                <div class="menu-item" @click="currentPage = 'dashboard'">
+                    <span>📊</span> 仪表盘
+                </div>
+                <div class="menu-item" @click="currentPage = 'playlists'">
+                    <span>📀</span> 歌单管理
+                </div>
+                <div class="menu-item" @click="currentPage = 'search'">
+                    <span>🔍</span> TG 频道搜索
+                </div>
+                <div class="menu-item" @click="currentPage = 'tasks'">
+                    <span>📥</span> 下载任务
+                </div>
+                <div class="menu-item active" @click="currentPage = 'settings'">
+                    <span>⚙️</span> 系统设置
+                </div>
+                <div class="menu-item" @click="currentPage = 'setup'">
+                    <span>🔧</span> Setup
+                </div>
+                <div class="menu-item" @click="logout" style="margin-top: 50px; border-top: 1px solid rgba(255,255,255,0.2);">
+                    <span>🚪</span> 退出登录
+                </div>
+            </div>
+        </div>
+
+        <!-- 主内容区 -->
+        <div class="main-content">
+            <div class="header">
+                <h1>⚙️ 系统设置</h1>
+            </div>
+
+            <div class="content-section">
+                <div class="section-title">基本设置</div>
+                
+                <div class="setting-group">
+                    <h3>📁 存储配置</h3>
+                    <el-form label-width="120px">
+                        <el-form-item label="下载根目录">
+                            <el-input v-model="settings.storagePath" placeholder="/vol2/1000/media/music"></el-input>
+                        </el-form-item>
+                        <el-form-item label="分类方式">
+                            <el-select v-model="settings.classifyBy" placeholder="选择分类方式">
+                                <el-option label="按音乐风格" value="style"></el-option>
+                                <el-option label="按艺术家" value="artist"></el-option>
+                                <el-option label="按专辑" value="album"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="文件命名格式">
+                            <el-input v-model="settings.fileNameFormat" placeholder="{artist} - {title}"></el-input>
+                            <div style="font-size: 12px; color: #999; margin-top: 5px;">
+                                可用变量：{artist}, {title}, {album}, {date}
+                            </div>
+                        </el-form-item>
+                    </el-form>
+                </div>
+
+                <div class="setting-group">
+                    <h3>🎵 音质配置</h3>
+                    <el-form label-width="120px">
+                        <el-form-item label="首选音质">
+                            <el-select v-model="settings.preferredQuality" placeholder="选择音质">
+                                <el-option label="无损 (FLAC/WAV)" value="lossless"></el-option>
+                                <el-option label="高品质 (320k MP3)" value="high"></el-option>
+                                <el-option label="标准品质" value="standard"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="降级策略">
+                            <el-switch v-model="settings.enableDowngrade" active-text="找不到无损时下载最高品质"></el-switch>
+                        </el-form-item>
+                        <el-form-item label="最小文件大小">
+                            <el-input-number v-model="settings.minFileSize" :min="0" :step="1"></el-input-number>
+                            <span style="margin-left: 10px;">MB（低于此值跳过下载）</span>
+                        </el-form-item>
+                    </el-form>
+                </div>
+
+                <div class="setting-group">
+                    <h3>🔔 通知配置</h3>
+                    <el-form label-width="120px">
+                        <el-form-item label="启用通知">
+                            <el-switch v-model="settings.enableNotification"></el-switch>
+                        </el-form-item>
+                        <el-form-item label="通知类型">
+                            <el-checkbox-group v-model="settings.notifyTypes">
+                                <el-checkbox label="task_complete">任务完成</el-checkbox>
+                                <el-checkbox label="playlist_complete">歌单完成</el-checkbox>
+                                <el-checkbox label="daily_summary">每日汇总</el-checkbox>
+                                <el-checkbox label="error_alert">错误警报</el-checkbox>
+                            </el-checkbox-group>
+                        </el-form-item>
+                        <el-form-item label="每日汇总时间">
+                            <el-time-picker v-model="settings.dailySummaryTime" format="HH:mm" placeholder="选择时间"></el-time-picker>
+                        </el-form-item>
+                    </el-form>
+                </div>
+
+                <div class="setting-group">
+                    <h3>🔧 高级配置</h3>
+                    <el-form label-width="120px">
+                        <el-form-item label="最大并发下载数">
+                            <el-input-number v-model="settings.maxConcurrent" :min="1" :max="10"></el-input-number>
+                        </el-form-item>
+                        <el-form-item label="队列超时时间">
+                            <el-input-number v-model="settings.queueTimeout" :min="1" :max="60"></el-input-number>
+                            <span style="margin-left: 10px;">秒</span>
+                        </el-form-item>
+                        <el-form-item label="自动重试次数">
+                            <el-input-number v-model="settings.maxRetries" :min="0" :max="5"></el-input-number>
+                        </el-form-item>
+                        <el-form-item label="启用代理">
+                            <el-switch v-model="settings.enableProxy"></el-switch>
+                        </el-form-item>
+                        <el-form-item label="代理地址" v-if="settings.enableProxy">
+                            <el-input v-model="settings.proxyAddress" placeholder="http://172.31.0.1:7890"></el-input>
+                        </el-form-item>
+                    </el-form>
+                </div>
+            </div>
+
+            <!-- 保存按钮 -->
+            <el-button class="save-btn" type="primary" size="large" @click="saveSettings">
+                💾 保存设置
+            </el-button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@3"></script>
+    <script src="https://cdn.jsdelivr.net/npm/element-plus"></script>
+    <script>
+        const { createApp, reactive, ref } = Vue;
+        
+        const app = createApp({
+            setup() {
+                const currentPage = ref('settings');
+                
+                const settings = reactive({
+                    storagePath: '/vol2/1000/media/music',
+                    classifyBy: 'style',
+                    fileNameFormat: '{artist} - {title}',
+                    preferredQuality: 'lossless',
+                    enableDowngrade: true,
+                    minFileSize: 5,
+                    enableNotification: true,
+                    notifyTypes: ['task_complete', 'playlist_complete', 'daily_summary'],
+                    dailySummaryTime: new Date(2026, 0, 1, 21, 0),
+                    maxConcurrent: 3,
+                    queueTimeout: 5,
+                    maxRetries: 3,
+                    enableProxy: true,
+                    proxyAddress: 'http://172.31.0.1:7890'
+                });
+                
+                const saveSettings = () => {
+                    ElementPlus.ElMessage.success('设置已保存！');
+                    // TODO: 调用 API 保存设置
+                };
+                
+                const logout = () => {
+                    localStorage.removeItem('token');
+                    window.location.href = '/';
+                };
+                
+                return {
+                    currentPage,
+                    settings,
+                    saveSettings,
+                    logout
+                };
+            }
+        });
+        
+        app.use(ElementPlus);
+        app.mount('.app-container');
+    </script>
+</body>
+</html>

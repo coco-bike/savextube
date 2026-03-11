@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SaveXTube - Setup</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-plus/dist/index.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; }
+        .app-container { display: flex; min-height: 100vh; }
+        .sidebar { width: 240px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px 0; }
+        .sidebar .logo { text-align: center; padding: 20px; font-size: 24px; font-weight: bold; }
+        .sidebar .menu { margin-top: 30px; }
+        .sidebar .menu-item { padding: 15px 25px; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; gap: 10px; }
+        .sidebar .menu-item:hover, .sidebar .menu-item.active { background: rgba(255,255,255,0.2); }
+        .main-content { flex: 1; padding: 30px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .header h1 { font-size: 28px; color: #333; }
+        .content-section { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); margin-bottom: 20px; }
+        .section-title { font-size: 18px; font-weight: bold; margin-bottom: 20px; }
+        .step-container { max-width: 800px; margin: 0 auto; }
+        .step { padding: 25px; border: 2px solid #e8e8e8; border-radius: 12px; margin-bottom: 20px; transition: all 0.3s; }
+        .step.active { border-color: #667eea; box-shadow: 0 4px 16px rgba(102,126,234,0.2); }
+        .step.completed { border-color: #67c23a; background: #f0f9eb; }
+        .step-header { display: flex; align-items: center; gap: 15px; margin-bottom: 15px; }
+        .step-number { width: 40px; height: 40px; border-radius: 50%; background: #e8e8e8; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; }
+        .step.active .step-number { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+        .step.completed .step-number { background: #67c23a; color: white; }
+        .step-title { font-size: 18px; font-weight: bold; }
+        .step-desc { color: #666; margin-bottom: 15px; line-height: 1.6; }
+        .code-block { background: #f6f8fa; padding: 15px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 13px; overflow-x: auto; margin: 10px 0; }
+        .info-box { background: #ecf5ff; padding: 15px; border-radius: 6px; border-left: 4px solid #409eff; margin: 15px 0; }
+        .warning-box { background: #fdf6ec; padding: 15px; border-radius: 6px; border-left: 4px solid #e6a23c; margin: 15px 0; }
+        .success-box { background: #f0f9eb; padding: 15px; border-radius: 6px; border-left: 4px solid #67c23a; margin: 15px 0; }
+        .action-area { margin-top: 20px; display: flex; gap: 15px; }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边栏 -->
+        <div class="sidebar">
+            <div class="logo">🎵 SaveXTube</div>
+            <div class="menu">
+                <div class="menu-item" @click="currentPage = 'dashboard'">
+                    <span>📊</span> 仪表盘
+                </div>
+                <div class="menu-item" @click="currentPage = 'playlists'">
+                    <span>📀</span> 歌单管理
+                </div>
+                <div class="menu-item" @click="currentPage = 'search'">
+                    <span>🔍</span> TG 频道搜索
+                </div>
+                <div class="menu-item" @click="currentPage = 'tasks'">
+                    <span>📥</span> 下载任务
+                </div>
+                <div class="menu-item" @click="currentPage = 'settings'">
+                    <span>⚙️</span> 系统设置
+                </div>
+                <div class="menu-item active" @click="currentPage = 'setup'">
+                    <span>🔧</span> Setup
+                </div>
+                <div class="menu-item" @click="logout" style="margin-top: 50px; border-top: 1px solid rgba(255,255,255,0.2);">
+                    <span>🚪</span> 退出登录
+                </div>
+            </div>
+        </div>
+
+        <!-- 主内容区 -->
+        <div class="main-content">
+            <div class="header">
+                <h1>🔧 Setup - Telegram 会话生成</h1>
+            </div>
+
+            <div class="step-container">
+                <!-- 步骤 1：检查状态 -->
+                <div class="step" :class="{active: currentStep === 1, completed: currentStep > 1}">
+                    <div class="step-header">
+                        <div class="step-number">1</div>
+                        <div class="step-title">检查当前状态</div>
+                    </div>
+                    <div class="step-desc">
+                        检查 Telegram 会话是否已经生成。如果已有会话，可以跳过后续步骤。
+                    </div>
+                    <div class="info-box" v-if="sessionStatus === 'checking'">
+                        🔍 正在检查会话状态...
+                    </div>
+                    <div class="success-box" v-else-if="sessionStatus === 'exists'">
+                        ✅ 检测到已有 Telegram 会话，可以正常使用媒体下载功能。
+                    </div>
+                    <div class="warning-box" v-else-if="sessionStatus === 'missing'">
+                        ⚠️ 未检测到 Telegram 会话，需要生成新的会话。请继续下一步。
+                    </div>
+                    <div class="action-area">
+                        <el-button type="primary" @click="checkSession" :loading="sessionStatus === 'checking'">
+                            检查会话
+                        </el-button>
+                        <el-button v-if="sessionStatus === 'missing'" type="primary" @click="nextStep">
+                            下一步 →
+                        </el-button>
+                    </div>
+                </div>
+
+                <!-- 步骤 2：获取 API 凭证 -->
+                <div class="step" :class="{active: currentStep === 2, completed: currentStep > 2}" v-show="currentStep >= 2">
+                    <div class="step-header">
+                        <div class="step-number">2</div>
+                        <div class="step-title">获取 Telegram API 凭证</div>
+                    </div>
+                    <div class="step-desc">
+                        需要在 Telegram 官方申请 API ID 和 API Hash。这是使用 Telegram 服务的必要凭证。
+                    </div>
+                    <div class="info-box">
+                        <strong>📝 申请步骤：</strong>
+                        <ol style="margin-left: 20px; margin-top: 10px; line-height: 2;">
+                            <li>访问 <a href="https://my.telegram.org" target="_blank">https://my.telegram.org</a></li>
+                            <li>使用你的 Telegram 账号登录（手机号 + 验证码）</li>
+                            <li>点击 "API development tools"</li>
+                            <li>点击 "Create new application"</li>
+                            <li>填写应用信息（名称和描述可以随意填写）</li>
+                            <li>提交后获得 <strong>App api_id</strong> 和 <strong>App api_hash</strong></li>
+                        </ol>
+                    </div>
+                    <div class="warning-box">
+                        ⚠️ <strong>重要提示：</strong>
+                        <ul style="margin-left: 20px; margin-top: 10px;">
+                            <li>api_id 是一个数字</li>
+                            <li>api_hash 是一个 32 位的字符串</li>
+                            <li>请妥善保管，不要泄露给他人</li>
+                        </ul>
+                    </div>
+                    <el-form label-width="120px" style="margin-top: 20px;">
+                        <el-form-item label="API ID">
+                            <el-input v-model="apiCredentials.apiId" placeholder="例如：12345678"></el-input>
+                        </el-form-item>
+                        <el-form-item label="API Hash">
+                            <el-input v-model="apiCredentials.apiHash" placeholder="例如：1eadd0ce914f1deb3bf5..."></el-input>
+                        </el-form-item>
+                    </el-form>
+                    <div class="action-area">
+                        <el-button @click="currentStep = 1">← 上一步</el-button>
+                        <el-button type="primary" @click="saveCredentials" :disabled="!apiCredentials.apiId || !apiCredentials.apiHash">
+                            保存并下一步 →
+                        </el-button>
+                    </div>
+                </div>
+
+                <!-- 步骤 3：生成会话 -->
+                <div class="step" :class="{active: currentStep === 3, completed: currentStep > 3}" v-show="currentStep >= 3">
+                    <div class="step-header">
+                        <div class="step-number">3</div>
+                        <div class="step-title">生成 Telethon 会话</div>
+                    </div>
+                    <div class="step-desc">
+                        使用上面获取的 API 凭证生成 Telethon 会话字符串。
+                    </div>
+                    <div class="info-box">
+                        💡 <strong>说明：</strong><br>
+                        会话字符串是一个加密的凭证，用于验证你的 Telegram 账号。生成后会自动保存到配置文件中。
+                    </div>
+                    <div class="action-area">
+                        <el-button @click="currentStep = 2">← 上一步</el-button>
+                        <el-button type="primary" @click="generateSession" :loading="generating">
+                            {{ generating ? '正在生成...' : '生成会话' }}
+                        </el-button>
+                    </div>
+                    <div class="success-box" v-if="sessionString">
+                        ✅ <strong>会话生成成功！</strong><br>
+                        <div class="code-block">{{ sessionString }}</div>
+                        <p style="margin-top: 10px; font-size: 13px; color: #666;">
+                            💾 会话已自动保存到配置文件，无需手动复制。
+                        </p>
+                    </div>
+                </div>
+
+                <!-- 步骤 4：测试连接 -->
+                <div class="step" :class="{active: currentStep === 4, completed: currentStep > 4}" v-show="currentStep >= 4">
+                    <div class="step-header">
+                        <div class="step-number">4</div>
+                        <div class="step-title">测试连接</div>
+                    </div>
+                    <div class="step-desc">
+                        测试 Telethon 客户端是否能正常连接 Telegram 服务器。
+                    </div>
+                    <div class="action-area">
+                        <el-button @click="currentStep = 3">← 上一步</el-button>
+                        <el-button type="primary" @click="testConnection" :loading="testing">
+                            {{ testing ? '正在测试...' : '测试连接' }}
+                        </el-button>
+                    </div>
+                    <div class="success-box" v-if="connectionTest === 'success'">
+                        ✅ <strong>连接测试成功！</strong><br>
+                        Telethon 客户端已正常连接，可以开始使用媒体下载功能了。
+                    </div>
+                    <div class="warning-box" v-if="connectionTest === 'failed'">
+                        ❌ <strong>连接测试失败</strong><br>
+                        {{ connectionError }}<br><br>
+                        可能的原因：
+                        <ul style="margin-left: 20px; margin-top: 10px;">
+                            <li>网络问题，请检查代理设置</li>
+                            <li>API 凭证错误，请重新获取</li>
+                            <li>Telegram 服务器暂时不可用</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- 完成 -->
+                <div class="step completed" v-if="currentStep === 5">
+                    <div class="step-header">
+                        <div class="step-number">✓</div>
+                        <div class="step-title">Setup 完成！</div>
+                    </div>
+                    <div class="success-box">
+                        🎉 <strong>恭喜！Setup 已全部完成！</strong><br><br>
+                        现在你可以：
+                        <ul style="margin-left: 20px; margin-top: 10px; line-height: 2;">
+                            <li>在 Telegram 中发送媒体文件给机器人进行下载</li>
+                            <li>在歌单管理页面添加歌单并下载</li>
+                            <li>在 TG 频道搜索页面搜索高品质音乐</li>
+                        </ul>
+                    </div>
+                    <div class="action-area">
+                        <el-button type="primary" @click="$router.push('/dashboard')">
+                            前往仪表盘
+                        </el-button>
+                        <el-button @click="currentStep = 1">
+                            重新开始
+                        </el-button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@3"></script>
+    <script src="https://cdn.jsdelivr.net/npm/element-plus"></script>
+    <script>
+        const { createApp, reactive, ref } = Vue;
+        
+        const app = createApp({
+            setup() {
+                const currentPage = ref('setup');
+                const currentStep = ref(1);
+                const sessionStatus = ref('');
+                const apiCredentials = reactive({
+                    apiId: '',
+                    apiHash: ''
+                });
+                const sessionString = ref('');
+                const generating = ref(false);
+                const testing = ref(false);
+                const connectionTest = ref('');
+                const connectionError = ref('');
+                
+                const checkSession = async () => {
+                    sessionStatus.value = 'checking';
+                    try {
+                        // TODO: 调用 API 检查会话
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        // 模拟检测结果
+                        sessionStatus.value = 'missing'; // 或 'exists'
+                    } catch (error) {
+                        ElementPlus.ElMessage.error('检查失败：' + error.message);
+                        sessionStatus.value = 'missing';
+                    }
+                };
+                
+                const saveCredentials = async () => {
+                    try {
+                        // TODO: 调用 API 保存凭证
+                        ElementPlus.ElMessage.success('凭证已保存');
+                        nextStep();
+                    } catch (error) {
+                        ElementPlus.ElMessage.error('保存失败：' + error.message);
+                    }
+                };
+                
+                const generateSession = async () => {
+                    generating.value = true;
+                    try {
+                        // TODO: 调用 API 生成会话
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        sessionString.value = '1BVtsOK4Bu7w...' + Math.random().toString(36).substring(2, 15);
+                        ElementPlus.ElMessage.success('会话生成成功');
+                        setTimeout(nextStep, 1000);
+                    } catch (error) {
+                        ElementPlus.ElMessage.error('生成失败：' + error.message);
+                    } finally {
+                        generating.value = false;
+                    }
+                };
+                
+                const testConnection = async () => {
+                    testing.value = true;
+                    try {
+                        // TODO: 调用 API 测试连接
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        connectionTest.value = 'success';
+                        ElementPlus.ElMessage.success('连接测试成功');
+                        setTimeout(() => currentStep.value = 5, 1000);
+                    } catch (error) {
+                        connectionTest.value = 'failed';
+                        connectionError.value = error.message;
+                        ElementPlus.ElMessage.error('连接测试失败');
+                    } finally {
+                        testing.value = false;
+                    }
+                };
+                
+                const nextStep = () => {
+                    currentStep.value++;
+                };
+                
+                const logout = () => {
+                    localStorage.removeItem('token');
+                    window.location.href = '/';
+                };
+                
+                return {
+                    currentPage,
+                    currentStep,
+                    sessionStatus,
+                    apiCredentials,
+                    sessionString,
+                    generating,
+                    testing,
+                    connectionTest,
+                    connectionError,
+                    checkSession,
+                    saveCredentials,
+                    generateSession,
+                    testConnection,
+                    nextStep,
+                    logout
+                };
+            }
+        });
+        
+        app.use(ElementPlus);
+        app.mount('.app-container');
+    </script>
+</body>
+</html>

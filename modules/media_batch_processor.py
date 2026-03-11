@@ -6,6 +6,7 @@
 
 import asyncio
 import logging
+from datetime import datetime
 from typing import List, Tuple, Any
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -140,19 +141,25 @@ class MediaBatchProcessor:
         """带信号量控制的下载"""
         async with self.semaphore:
             try:
-                logger.info(f"📥 [{index}/{total}] 开始下载")
+                file_name = getattr(attachment, 'file_name', 'unknown_file')
+                file_size = getattr(attachment, 'file_size', 0)
+                total_mb = file_size / (1024 * 1024) if file_size else 0
                 
-                # 更新进度
+                logger.info(f"📥 [{index}/{total}] 开始下载：{file_name} ({total_mb:.2f} MB)")
+                
+                # 更新进度 - 显示详细信息
                 try:
                     await status_message.edit_text(
                         f"📦 **批量下载进度** ({index}/{total})\n\n"
-                        f"📥 正在下载：第 {index} 个文件\n"
-                        f"⏳ 并发限制：最多同时下载 {self.semaphore._value} 个文件"
+                        f"📥 正在下载：{file_name}\n"
+                        f"📊 文件大小：{total_mb:.2f} MB\n"
+                        f"⏳ 并发限制：最多同时下载 {self.semaphore._value} 个文件\n"
+                        f"⏱️ 开始时间：{datetime.now().strftime('%H:%M:%S')}"
                     )
                 except Exception as e:
                     logger.warning(f"更新进度失败：{e}")
                 
-                # 执行实际下载
+                # 执行实际下载（会显示详细进度）
                 await self._execute_download(update, context, message, status_message, attachment)
                 
                 return True
@@ -171,19 +178,13 @@ class MediaBatchProcessor:
     
     async def _execute_download(self, update, context, message, status_message, attachment):
         """
-        执行实际下载（调用原有 download_user_media 的核心逻辑）
+        执行实际下载（直接调用完整的 download_user_media）
+        这样可以保留原有的详细进度显示和元数据信息
         """
         try:
-            # 调用 bot 的媒体下载核心方法
-            if hasattr(self.bot, '_process_telethon_media_download'):
-                await self.bot._process_telethon_media_download(
-                    update, context, message, status_message, attachment
-                )
-            else:
-                # 降级：尝试直接调用 download_user_media（会重复一些逻辑）
-                logger.warning("⚠️ 使用降级下载方案")
-                # 这里会重复权限检查等，但能保证功能正常
-                await self.bot.download_user_media(update, context)
+            # 直接调用完整的 download_user_media 函数
+            # 这样会显示详细的下载进度、文件信息、分辨率等
+            await self.bot.download_user_media(update, context)
         except Exception as e:
             logger.error(f"❌ 执行下载失败：{e}", exc_info=True)
             try:
