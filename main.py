@@ -20715,7 +20715,7 @@ async def test_network_connectivity(proxy_host: str = None):
 
     for url in test_urls:
         try:
-            async with httpx.AsyncClient(timeout=10.0, proxies=proxies if proxy_host else None) as client:
+            async with httpx.AsyncClient(timeout=10.0, proxy=proxy_host if proxy_host else None) as client:
                 response = await client.get(url)
                 if response.status_code == 200:
                     logger.debug(f"🟢 网络连接测试成功: {url}")
