@@ -1,7 +1,7 @@
 # SaveXTube - 智能多媒体下载机器人
 
 > **原项目地址**：[renlixing87/savextube](https://github.com/renlixing87/savextube)
-> 
+>
 > 感谢原作者的开源贡献！本项目基于原版本进行功能增强和优化。
 
 SaveXTube 是一个基于 Telegram 的智能多媒体下载工具，支持视频、音乐、磁力链接等多种内容下载，特别针对 NAS 环境进行了优化。
@@ -80,7 +80,7 @@ SaveXTube 是一个基于 Telegram 的智能多媒体下载工具，支持视频
 - **质量保证**：转换过程保持原内容质量
 - **可配置**：支持开启/关闭自动转换功能
 
-##  **🔧 Cookies 获取方法**
+## **🔧 Cookies 获取方法**
 
 **说明**：所有平台均采用相同的 Cookies 获取方式。
 
@@ -107,7 +107,7 @@ SaveXTube 是一个基于 Telegram 的智能多媒体下载工具，支持视频
    # Netscape HTTP Cookie File
    # http://curl.haxx.se/rfc/cookie_spec.html
    # This is a generated file! Do not edit.
-   
+
    .example.com     TRUE     /     TRUE     11111111111     SESSION_ID     XXXXXXXXXXXXXXXXXXXXXXXXXXXXX
    ```
 
@@ -138,16 +138,15 @@ SaveXTube 是一个基于 Telegram 的智能多媒体下载工具，支持视频
 
 2. 填写必需信息
 
- - **API ID**
+- **API ID**
 
- - **API Hash**
+- **API Hash**
 
- - **Telegram 手机号**（接收验证码登录）
+- **Telegram 手机号**（接收验证码登录）
 
-   ⚡ 成功后，系统会在指定目录自动生成 **会话文件**。
+  ⚡ 成功后，系统会在指定目录自动生成 **会话文件**。
 
 3. 使用方式
-
    - 将频道或群里的视频 **转发** 到 **savextube 机器人**，即可完成转存。
 
 ## 🎵 Apple Music 下载方案
@@ -162,16 +161,16 @@ Apple Music 提供 **两种接入方式**：
 
 ### 2. 🚀 增强方案（需引入 Wrapper）
 
-- 先部署 **Wrapper** 服务  
-- 在配置文件中指定 **Wrapper 的两个地址**  
-- 支持 **更高音质**，并解锁更多功能  
+- 先部署 **Wrapper** 服务
+- 在配置文件中指定 **Wrapper 的两个地址**
+- 支持 **更高音质**，并解锁更多功能
 
 ---
 
 ### 📊 对比表
 
-| 方案       | 配置方式                | 下载音质 | 备注                      |
-| ---------- | ----------------------- | -------- | ------------------------- |
+| 方案        | 配置方式                | 下载音质 | 备注                      |
+| ----------- | ----------------------- | -------- | ------------------------- |
 | ⭐ 默认方案 | 配置 cookies            | 普通音质 | 简单快速，适合新手        |
 | 🚀 增强方案 | 部署 Wrapper + 配置地址 | 高音质   | 需要额外部署 Wrapper 服务 |
 
@@ -179,12 +178,12 @@ Apple Music 提供 **两种接入方式**：
 
 ### 📌 提示
 
-- 如果只是日常试听，**默认方案**即可满足  
+- 如果只是日常试听，**默认方案**即可满足
 - 如果追求 **高音质 / 完整功能**，推荐使用 **增强方案**
 
 增加方案依赖于第三方开源项目 Wrapper,项目地址为https://github.com/zhaarey/wrapper ，但是该项目没有直接提供 Docker,有动手能力可以自己打包，也可以使用本项目打包好的，地址参考下文配置。
 
-------
+---
 
 ## **🔧 Wrapper 使用说明**
 
@@ -207,7 +206,7 @@ docker run \
 - Apple ID 需求有 VIP 权限，并且不建议使用主力账号下载，下载过多会导致封号，强烈建议单独申请一个小号下载使用！
 - 提示Waiting for input...，这时候使用echo-n 114514 > rootfs//data/data/com,apple.android.music/files/2fa.txt 这个命令创建文件，如果你的 NAS支持直接编辑文件，你可以提供在 NAS这个目录中创建好 2fa.txt，当手机收到验证码就填写进去，这样就省去命令行操作不方便问题。
 
-------
+---
 
 ### **2️⃣ 启动 Wrapper 服务**
 
@@ -230,7 +229,7 @@ services:
       - /vol1/1000/docker/wrapper/rootfs/data:/app/rootfs/data
 ```
 
-------
+---
 
 ### **3️⃣ 与 SavexTube 集成（可选）**
 
@@ -292,16 +291,16 @@ services:
 
       # 重启容器
       - /var/run/docker.sock:/var/run/docker.sock
-      
+
       # Cookies 目录
       - /vol1/1000/docker/SaveXTube/cookies/:/app/cookies
-      
+
       # 配置文件目录
       - /vol1/1000/docker/SaveXTube/config:/app/config
-      
+
       # 数据库目录
       - /vol1/1000/docker/SaveXTube/db/:/app/db
-      
+
       # 日志目录
       - /vol1/1000/docker/SaveXTube/logs:/app/logs
 ```
@@ -312,14 +311,13 @@ services:
 volumes:
   # 统一下载目录
   - /vol1/1000/media/downloads/:/downloads/
-  
+
   # 或者分别映射不同平台到不同目录
   - /vol1/1000/media/videos/youtube:/downloads/YouTube
   - /vol1/1000/media/videos/bilibili:/downloads/Bilibili
   - /vol1/1000/media/music/netease:/downloads/NeteaseCloudMusic
   - /vol1/1000/media/music/qqmusic:/downloads/QQMusic
   - /vol1/1000/media/music/applemusic:/downloads/AppleMusic
- 
 ```
 
 **注意**: 所有路径都可以通过环境变量进行自定义配置。
@@ -328,26 +326,26 @@ volumes:
 
 ### 📋 支持的平台和下载路径
 
-| 平台                | 默认下载路径                     | 分类        | 说明                    |
-| ------------------- | -------------------------------- | ----------- | ----------------------- |
-| **YouTube**         | `/downloads/YouTube/`            | 🎬视频       | YouTube视频和音频       |
-| **B站 (Bilibili)**  | `/downloads/Bilibili/`           | 🎬视频       | B站视频，包含收藏夹订阅 |
-| **X (Twitter)**     | `/downloads/Pictures/twitter/`   | 📷图片       | X平台图片               |
-| **X (Twitter)**     | `/downloads/X/`                  | 🎬视频       | X平台视频和图片         |
-| **抖音 (Douyin)**   | `/downloads/Douyin/`             | 🎬视频       | 抖音短视频              |
-| **快手 (Kuaishou)** | `/downloads/Kuaishou/`           | 🎬视频       | 快手短视频              |
-| **Instagram**       | `/downloads/Instagram/Pic`       | 📷图片       | Instagram图片           |
-| **Instagram**       | `/downloads/Instagram/`          | 🎬视频       | Instagram图片和视频     |
-| **Facebook**        | `/downloads/Facebook/`           | 🎬视频       | Facebook视频            |
+| 平台                | 默认下载路径                     | 分类          | 说明                    |
+| ------------------- | -------------------------------- | ------------- | ----------------------- |
+| **YouTube**         | `/downloads/YouTube/`            | 🎬视频        | YouTube视频和音频       |
+| **B站 (Bilibili)**  | `/downloads/Bilibili/`           | 🎬视频        | B站视频，包含收藏夹订阅 |
+| **X (Twitter)**     | `/downloads/Pictures/twitter/`   | 📷图片        | X平台图片               |
+| **X (Twitter)**     | `/downloads/X/`                  | 🎬视频        | X平台视频和图片         |
+| **抖音 (Douyin)**   | `/downloads/Douyin/`             | 🎬视频        | 抖音短视频              |
+| **快手 (Kuaishou)** | `/downloads/Kuaishou/`           | 🎬视频        | 快手短视频              |
+| **Instagram**       | `/downloads/Instagram/Pic`       | 📷图片        | Instagram图片           |
+| **Instagram**       | `/downloads/Instagram/`          | 🎬视频        | Instagram图片和视频     |
+| **Facebook**        | `/downloads/Facebook/`           | 🎬视频        | Facebook视频            |
 | **小红书 **         | `/downloads/Xiaohongshu/`        | 🎬视频,📷图片 | 小红书视频及图片        |
-| **P站 (Pornhub)**   | `/downloads/Pornhub/`            | 🎬视频       | P站视频                 |
-| **Xvideos**         | `/downloads/Xvideos/`            | 🎬视频       | Xvideos视频             |
-| **Telegram**        | `/downloads/Telegram/`           | 📷图片       | Telegram文件            |
-| **Telegraph**       | `/downloads/Pictures/telegraph/` | 📷图片       | Telegraph图片           |
-| **网易云音乐**      | `/downloads/NeteaseCloudMusic/`  | 🎵音乐       | 网易云音乐文件          |
-| **QQ音乐**          | `/downloads/QQMusic/`            | 🎵音乐       | QQ音乐文件              |
-| **Apple Music**     | `/downloads/AppleMusic/`         | 🎵音乐       | Apple Music文件         |
-| **YouTube Music**   | `/downloads/YouTubeMusic/`       | 🎵音乐       | YouTube Music文件       |
+| **P站 (Pornhub)**   | `/downloads/Pornhub/`            | 🎬视频        | P站视频                 |
+| **Xvideos**         | `/downloads/Xvideos/`            | 🎬视频        | Xvideos视频             |
+| **Telegram**        | `/downloads/Telegram/`           | 📷图片        | Telegram文件            |
+| **Telegraph**       | `/downloads/Pictures/telegraph/` | 📷图片        | Telegraph图片           |
+| **网易云音乐**      | `/downloads/NeteaseCloudMusic/`  | 🎵音乐        | 网易云音乐文件          |
+| **QQ音乐**          | `/downloads/QQMusic/`            | 🎵音乐        | QQ音乐文件              |
+| **Apple Music**     | `/downloads/AppleMusic/`         | 🎵音乐        | Apple Music文件         |
+| **YouTube Music**   | `/downloads/YouTubeMusic/`       | 🎵音乐        | YouTube Music文件       |
 
 ## 📋 配置文件 (savextube.toml)
 
@@ -423,7 +421,7 @@ youtube_convert_to_mp4 = true
 - `/status` - 查看系统状态
 - `/version ` - 查看版本
 - `/favsub ` - 订阅B站收藏夹
-- `/setting`  - 功能设置
+- `/setting` - 功能设置
 - `/cleanup ` - 清理文件
 - `/cancel ` - 取消下载
 - `/reboot ` - 重启容器
@@ -470,18 +468,21 @@ youtube_convert_to_mp4 = true
 ### v0.6 (最新) - 2026-03-10
 
 #### 🎯 核心功能
+
 - ✅ **多线程下载** - 单文件 16 线程，速度提升 87%~175%
 - ✅ **批量并发下载** - 支持同时下载多个链接（最多 3 个并发）
 - ✅ **智能链接提取** - 自动从文本中提取多个链接
 - ✅ **模块化架构** - 代码重构，便于维护和扩展
 
 #### 🚀 性能优化
+
 - ✅ **aria2c 加速** - 支持 aria2c 多线程下载器
 - ✅ **并发控制** - 可配置最大并发数（2-5 个）
 - ✅ **自动降级** - aria2c 不可用时自动使用 yt-dlp
 - ✅ **断点续传** - 支持下载中断后继续
 
 #### 📦 模块化重构
+
 - ✅ **modules/url_extractor.py** - URL 提取工具
 - ✅ **modules/batch_downloader.py** - 批量下载处理器
 - ✅ **modules/message_handler.py** - Telegram 消息处理器
@@ -493,6 +494,7 @@ youtube_convert_to_mp4 = true
 - ✅ **modules/utils/file_utils.py** - 文件处理工具
 
 #### 🔧 配置优化
+
 - ✅ **多线程配置** - 支持环境变量和 TOML 配置
   - `MT_FILE_THREADS` - 单文件线程数（默认 16）
   - `MT_CONCURRENT_FILES` - 并发文件数（默认 3）
@@ -500,17 +502,20 @@ youtube_convert_to_mp4 = true
 - ✅ **模块化导入** - 自动检测和加载模块
 
 #### 📊 自动化
+
 - ✅ **GitHub Actions** - 自动构建和推送 Docker 镜像
 - ✅ **多平台构建** - 支持 linux/amd64 和 linux/arm64
 - ✅ **自动版本标记** - 支持语义化版本和 latest 标签
 
 #### 📝 文档完善
-- ✅ **MULTITHREAD_README.md** - 多线程下载使用指南
-- ✅ **MODULE_REFACTOR.md** - 模块化重构说明
-- ✅ **BATCH_DOWNLOAD_TODO.md** - 批量下载功能说明
-- ✅ **test_modules.py** - 模块功能测试脚本
+
+- ✅ **doc/MULTITHREAD_README.md** - 多线程下载使用指南
+- ✅ **doc/MODULE_REFACTOR.md** - 模块化重构说明
+- ✅ **doc/BATCH_DOWNLOAD_TODO.md** - 批量下载功能说明
+- ✅ **test/test_modules.py** - 模块功能测试脚本
 
 #### 🐛 Bug 修复
+
 - ✅ 修复文件名特殊字符处理
 - ✅ 优化 URL 提取和清理逻辑
 - ✅ 改进错误处理和日志记录

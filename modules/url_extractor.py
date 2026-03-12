@@ -81,3 +81,25 @@ class URLExtractor:
             'music.apple.com' # Apple Music
         ]
         return any(domain in url for domain in music_domains)
+
+    @staticmethod
+    def extract_xiaohongshu_url(text: str) -> str:
+        """从文本中提取小红书链接，兼容非标准协议。"""
+        # 先尝试提取标准 http/https 链接
+        urls = re.findall(r'http[s]?://[^\s]+', text)
+        for url in urls:
+            if 'xhslink.com' in url or 'xiaohongshu.com' in url:
+                return url
+
+        # 兼容 p://、tp://、ttp:// 等协议
+        non_http_urls = re.findall(r'(p|tp|ttp)://([^\s]+)', text)
+        for _, url in non_http_urls:
+            if 'xhslink.com' in url or 'xiaohongshu.com' in url:
+                return f"https://{url}"
+
+        # 匹配没有协议的小红书域名
+        domain_urls = re.findall(r'(xhslink\.com/[^\s]+|xiaohongshu\.com/[^\s]+)', text)
+        for url in domain_urls:
+            return f"https://{url}"
+
+        return None

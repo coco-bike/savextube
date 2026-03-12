@@ -5,7 +5,6 @@
 """
 
 import os
-import sys
 import json
 import time
 import logging
@@ -15,8 +14,7 @@ from pathlib import Path
 from flask import Flask, Blueprint, jsonify, request, send_from_directory
 
 # 导入配置读取器
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from config_reader import load_toml_config, get_proxy_config
+from modules.config.toml_config import load_toml_config, get_proxy_config
 
 # 设置日志
 logging.basicConfig(level=logging.INFO)

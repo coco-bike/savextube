@@ -9,10 +9,12 @@ import asyncio
 import sys
 import os
 
-# 添加当前目录到 Python 路径
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# 添加项目根目录到 Python 路径（脚本已迁移到 test/）
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(CURRENT_DIR)
+sys.path.insert(0, PROJECT_ROOT)
 
-from multithread_downloader import MultiThreadDownloader, DownloadConfig, create_downloader
+from modules.downloaders.multithread_downloader import MultiThreadDownloader, DownloadConfig, create_downloader
 
 
 async def test_basic_download():

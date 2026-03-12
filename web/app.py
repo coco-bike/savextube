@@ -21,6 +21,12 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 import asyncio
 
+from modules.config.channel_switches import (
+    DEFAULT_CHANNEL_SWITCHES,
+    load_channel_switches,
+    save_channel_switches,
+)
+
 # 添加父目录到路径
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -33,7 +39,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 小时
 
 # ============ 密码加密 ============
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/token", auto_error=False)
 
 # ============ 默认用户 ============
 DEFAULT_USERS = {
@@ -69,6 +75,8 @@ TEMPLATES_DIR.mkdir(exist_ok=True)
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+templates.env.variable_start_string = "[["
+templates.env.variable_end_string = "]]"
 
 # ============ 工具函数 ============
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -90,15 +98,20 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-async def get_current_user(token: str = Depends(oauth2_scheme)):
+async def get_current_user(request: Request, token: Optional[str] = Depends(oauth2_scheme)):
     """获取当前用户"""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="无法验证凭据",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    # 浏览器页面跳转通常不带 Authorization Header，回退读取 Cookie 中的 token
+    access_token = token or request.cookies.get("access_token")
+    if not access_token:
+        raise credentials_exception
+
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(access_token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
@@ -123,7 +136,7 @@ def get_bot_instance():
 @app.get("/")
 async def root(request: Request):
     """根页面 - 重定向到登录"""
-    return templates.TemplateResponse("login.html", {"request": {}})
+    return templates.TemplateResponse("login.html", {"request": request})
 
 @app.get("/dashboard")
 async def dashboard(request: Request, current_user: dict = Depends(get_current_user)):
@@ -189,7 +202,16 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         data={"sub": user["username"]},
         expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+
+    response = JSONResponse({"access_token": access_token, "token_type": "bearer"})
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        httponly=True,
+        samesite="lax",
+    )
+    return response
 
 @app.get("/api/status")
 async def get_status(current_user: dict = Depends(get_current_user)):
@@ -254,11 +276,12 @@ async def get_tasks(current_user: dict = Depends(get_current_user)):
 @app.get("/api/settings")
 async def get_settings(current_user: dict = Depends(get_current_user)):
     """获取系统设置"""
-    # TODO: 从配置文件读取
+    channel_switches = load_channel_switches()
     return {
         "storage_path": "/vol2/1000/media/music",
         "quality": "lossless",
-        "notify": True
+        "notify": True,
+        "channel_switches": channel_switches,
     }
 
 @app.post("/api/settings")
@@ -267,8 +290,16 @@ async def update_settings(
     current_user: dict = Depends(get_current_user)
 ):
     """更新系统设置"""
-    # TODO: 保存到配置文件
-    return {"success": True}
+    try:
+        raw_switches = settings.get("channel_switches")
+        if isinstance(raw_switches, dict):
+            save_channel_switches(raw_switches)
+        return {
+            "success": True,
+            "channel_switches": load_channel_switches(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"保存设置失败: {e}")
 
 # ============ 启动函数 ============
 def start_web_server(host: str = "0.0.0.0", port: int = 8530):

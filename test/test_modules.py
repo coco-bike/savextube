@@ -6,6 +6,12 @@
 
 import sys
 import re
+import os
+
+# 添加项目根目录到 Python 路径（脚本已迁移到 test/）
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(CURRENT_DIR)
+sys.path.insert(0, PROJECT_ROOT)
 
 def test_url_extractor():
     """测试 URL 提取功能"""

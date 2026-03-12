@@ -94,31 +94,31 @@ class MultiThreadDownloader:
         # 如果使用 aria2c 作为外部下载器
         if self.config.use_aria2c and self.aria2c_path:
             logger.info(f"🚀 启用 aria2c 多线程下载（{self.config.file_threads}线程）")
-            
+
+            # Python API 中 external_downloader_args 需要传 aria2c 的真实参数
+            # 不能传 yt-dlp CLI 形态的 --aria2c-args=... 字符串。
             aria2c_opts = [
-                '--aria2c-command=aria2c',
-                f'--aria2c-args="-x{self.config.file_threads} '
-                f'-s{self.config.aria2c_splits} '
-                f'-k1M '
-                f'-c '
-                f'--min-split-size={self.config.aria2c_min_split_size} '
-                f'--max-connection-per-server={self.config.aria2c_connections} '
-                f'--download-result=hide'
+                f'-x{self.config.file_threads}',
+                f'-s{self.config.aria2c_splits}',
+                '-k1M',
+                '-c',
+                f'--min-split-size={self.config.aria2c_min_split_size}',
+                f'--max-connection-per-server={self.config.aria2c_connections}',
+                '--download-result=hide',
             ]
-            
+
             # 如果有速度限制
             if self.config.speed_limit and self.config.speed_limit != "0":
-                aria2c_opts[-1] += f' --max-download-limit={self.config.speed_limit}'
-            
-            aria2c_opts[-1] += '"'
-            
+                aria2c_opts.append(f'--max-download-limit={self.config.speed_limit}')
+
             options['external_downloader'] = 'aria2c'
-            options['external_downloader_args'] = aria2c_opts
+            options['external_downloader_args'] = {'default': aria2c_opts}
         else:
             # 使用 yt-dlp 内置的并发下载
             logger.info(f"📥 使用 yt-dlp 内置下载（{self.config.file_threads}分片）")
             options['hls_use_mpegts'] = True
             options['http_chunk_size'] = '10M'
+            options['concurrent_fragment_downloads'] = max(1, min(self.config.file_threads, 32))
         
         # 通用优化选项
         options.update({
@@ -161,18 +161,63 @@ class MultiThreadDownloader:
             'end_time': None,
             'duration': None,
             'file_size': 0,
+            'final_filename': None,
+            'title': None,
+            'resolution': '未知',
+            'quality': None,
+            'bitrate': None,
+            'thumbnail': None,
+            'duration': None,
+        }
+
+        progress_snapshot = {
+            'final_filename': None,
+            'title': None,
+            'resolution': '未知',
+            'quality': None,
+            'bitrate': None,
+            'thumbnail': None,
+            'duration': None,
+            'total_bytes': 0,
         }
         
         # 添加进度钩子
         def progress_hook(d):
+            info = d.get('info_dict') or {}
+            if info:
+                progress_snapshot['title'] = info.get('title') or progress_snapshot['title']
+                progress_snapshot['resolution'] = (
+                    info.get('resolution')
+                    or (f"{info.get('width')}x{info.get('height')}" if info.get('width') and info.get('height') else None)
+                    or progress_snapshot['resolution']
+                )
+                progress_snapshot['quality'] = info.get('format_note') or info.get('format') or progress_snapshot['quality']
+                progress_snapshot['bitrate'] = (
+                    info.get('abr')
+                    or info.get('tbr')
+                    or progress_snapshot['bitrate']
+                )
+                progress_snapshot['thumbnail'] = info.get('thumbnail') or progress_snapshot['thumbnail']
+                progress_snapshot['duration'] = info.get('duration') or progress_snapshot['duration']
+
             if progress_callback:
-                progress_callback(d)
+                try:
+                    if asyncio.iscoroutinefunction(progress_callback):
+                        asyncio.run_coroutine_threadsafe(progress_callback(d), loop)
+                    else:
+                        callback_result = progress_callback(d)
+                        if asyncio.iscoroutine(callback_result):
+                            asyncio.run_coroutine_threadsafe(callback_result, loop)
+                except Exception as callback_error:
+                    logger.warning(f"⚠️ 进度回调执行失败: {callback_error}")
             
             if d['status'] == 'finished':
+                progress_snapshot['final_filename'] = d.get('filename') or progress_snapshot['final_filename']
                 logger.info(f"✅ 下载完成：{d.get('filename', 'unknown')}")
             elif d['status'] == 'downloading':
                 downloaded = d.get('downloaded_bytes', 0)
                 total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
+                progress_snapshot['total_bytes'] = total or progress_snapshot['total_bytes']
                 speed = d.get('speed', 0)
                 eta = d.get('eta', 0)
                 
@@ -184,7 +229,10 @@ class MultiThreadDownloader:
                         f"剩余：{eta}s"
                     )
         
-        ydl_opts['progress_hooks'] = [progress_hook]
+        existing_hooks = ydl_opts.get('progress_hooks', [])
+        if not isinstance(existing_hooks, list):
+            existing_hooks = [existing_hooks]
+        ydl_opts['progress_hooks'] = existing_hooks + [progress_hook]
         
         try:
             loop = asyncio.get_running_loop()
@@ -198,9 +246,18 @@ class MultiThreadDownloader:
             result['success'] = True
             result['end_time'] = time.time()
             result['duration'] = result['end_time'] - result['start_time']
+            result['final_filename'] = progress_snapshot['final_filename']
+            result['title'] = progress_snapshot['title']
+            result['resolution'] = progress_snapshot['resolution']
+            result['quality'] = progress_snapshot['quality']
+            result['bitrate'] = progress_snapshot['bitrate']
+            result['thumbnail'] = progress_snapshot['thumbnail']
+            result['duration'] = progress_snapshot['duration']
             
             # 获取下载的文件大小
             result['file_size'] = self._get_downloaded_file_size(output_template)
+            if result['file_size'] <= 0 and progress_snapshot['total_bytes']:
+                result['file_size'] = progress_snapshot['total_bytes']
             
             logger.info(
                 f"🎉 下载完成 | "
