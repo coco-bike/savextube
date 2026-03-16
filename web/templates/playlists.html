@@ -1,292 +1,458 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SaveXTube - 歌单管理</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-plus/dist/index.css">
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/element-plus/dist/index.css"
+    />
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; }
-        .app-container { display: flex; min-height: 100vh; }
-        .sidebar { width: 240px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px 0; }
-        .sidebar .logo { text-align: center; padding: 20px; font-size: 24px; font-weight: bold; }
-        .sidebar .menu { margin-top: 30px; }
-        .sidebar .menu-item { padding: 15px 25px; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; gap: 10px; }
-        .sidebar .menu-item:hover, .sidebar .menu-item.active { background: rgba(255,255,255,0.2); }
-        .main-content { flex: 1; padding: 30px; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
-        .header h1 { font-size: 28px; color: #333; }
-        .content-section { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
-        .section-title { font-size: 18px; font-weight: bold; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
-        .playlist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
-        .playlist-card { border: 1px solid #e8e8e8; border-radius: 8px; padding: 20px; transition: all 0.3s; }
-        .playlist-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.12); transform: translateY(-2px); }
-        .playlist-card .cover { width: 100%; height: 150px; background: #f0f0f0; border-radius: 6px; margin-bottom: 15px; display: flex; align-items: center; justify-content: center; font-size: 48px; }
-        .playlist-card .info h3 { font-size: 16px; margin-bottom: 8px; color: #333; }
-        .playlist-card .info p { font-size: 13px; color: #666; margin-bottom: 5px; }
-        .playlist-card .actions { margin-top: 15px; display: flex; gap: 10px; }
-        .tag-platform { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-right: 5px; }
-        .tag-platform.netease { background: #fe3838; color: white; }
-        .tag-platform.qq { background: #32c955; color: white; }
-        .tag-platform.qishui { background: #00d092; color: white; }
-        .empty-state { text-align: center; padding: 60px 20px; color: #999; }
-        .empty-state .icon { font-size: 64px; margin-bottom: 20px; }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: #f5f7fa;
+      }
+      .app-container {
+        display: flex;
+        min-height: 100vh;
+      }
+      .sidebar {
+        width: 240px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px 0;
+      }
+      .sidebar .logo {
+        text-align: center;
+        padding: 20px;
+        font-size: 24px;
+        font-weight: bold;
+      }
+      .sidebar .menu {
+        margin-top: 30px;
+      }
+      .sidebar .menu-item {
+        padding: 15px 25px;
+        cursor: pointer;
+        transition: all 0.3s;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .sidebar .menu-item:hover,
+      .sidebar .menu-item.active {
+        background: rgba(255, 255, 255, 0.2);
+      }
+      .main-content {
+        flex: 1;
+        padding: 30px;
+      }
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+      }
+      .header h1 {
+        font-size: 28px;
+        color: #333;
+      }
+      .content-section {
+        background: white;
+        border-radius: 12px;
+        padding: 25px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+      }
+      .section-title {
+        font-size: 18px;
+        font-weight: bold;
+        margin-bottom: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .playlist-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 20px;
+      }
+      .playlist-card {
+        border: 1px solid #e8e8e8;
+        border-radius: 8px;
+        padding: 20px;
+        transition: all 0.3s;
+      }
+      .playlist-card:hover {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        transform: translateY(-2px);
+      }
+      .playlist-card .cover {
+        width: 100%;
+        height: 150px;
+        background: #f0f0f0;
+        border-radius: 6px;
+        margin-bottom: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 48px;
+      }
+      .playlist-card .info h3 {
+        font-size: 16px;
+        margin-bottom: 8px;
+        color: #333;
+      }
+      .playlist-card .info p {
+        font-size: 13px;
+        color: #666;
+        margin-bottom: 5px;
+      }
+      .playlist-card .actions {
+        margin-top: 15px;
+        display: flex;
+        gap: 10px;
+      }
+      .tag-platform {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        margin-right: 5px;
+      }
+      .tag-platform.netease {
+        background: #fe3838;
+        color: white;
+      }
+      .tag-platform.qq {
+        background: #32c955;
+        color: white;
+      }
+      .tag-platform.qishui {
+        background: #00d092;
+        color: white;
+      }
+      .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #999;
+      }
+      .empty-state .icon {
+        font-size: 64px;
+        margin-bottom: 20px;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <div class="app-container">
-        <!-- 侧边栏 -->
-        <div class="sidebar">
-            <div class="logo">🎵 SaveXTube</div>
-            <div class="menu">
-                <div class="menu-item" @click="currentPage = 'dashboard'">
-                    <span>📊</span> 仪表盘
-                </div>
-                <div class="menu-item active" @click="currentPage = 'playlists'">
-                    <span>📀</span> 歌单管理
-                </div>
-                <div class="menu-item" @click="currentPage = 'search'">
-                    <span>🔍</span> TG 频道搜索
-                </div>
-                <div class="menu-item" @click="currentPage = 'tasks'">
-                    <span>📥</span> 下载任务
-                </div>
-                <div class="menu-item" @click="currentPage = 'settings'">
-                    <span>⚙️</span> 系统设置
-                </div>
-                <div class="menu-item" @click="currentPage = 'setup'">
-                    <span>🔧</span> Setup
-                </div>
-                <div class="menu-item" @click="logout" style="margin-top: 50px; border-top: 1px solid rgba(255,255,255,0.2);">
-                    <span>🚪</span> 退出登录
-                </div>
-            </div>
+      <!-- 侧边栏 -->
+      <div class="sidebar">
+        <div class="logo">🎵 SaveXTube</div>
+        <div class="menu">
+          <div class="menu-item" @click="goTo('/dashboard')">
+            <span>📊</span> 仪表盘
+          </div>
+          <div class="menu-item active" @click="goTo('/playlists')">
+            <span>📀</span> 歌单管理
+          </div>
+          <div class="menu-item" @click="goTo('/search')">
+            <span>🔍</span> TG 频道搜索
+          </div>
+          <div class="menu-item" @click="goTo('/tasks')">
+            <span>📥</span> 下载任务
+          </div>
+          <div class="menu-item" @click="goTo('/settings')">
+            <span>⚙️</span> 系统设置
+          </div>
+          <div class="menu-item" @click="goTo('/setup')">
+            <span>🔧</span> Setup
+          </div>
+          <div
+            class="menu-item"
+            @click="logout"
+            style="
+              margin-top: 50px;
+              border-top: 1px solid rgba(255, 255, 255, 0.2);
+            "
+          >
+            <span>🚪</span> 退出登录
+          </div>
+        </div>
+      </div>
+
+      <!-- 主内容区 -->
+      <div class="main-content">
+        <div class="header">
+          <h1>📀 歌单管理</h1>
+          <el-button type="primary" @click="showAddDialog = true">
+            <span style="font-size: 16px">+</span> 添加歌单
+          </el-button>
         </div>
 
-        <!-- 主内容区 -->
-        <div class="main-content">
-            <div class="header">
-                <h1>📀 歌单管理</h1>
-                <el-button type="primary" @click="showAddDialog = true">
-                    <span style="font-size: 16px;">+</span> 添加歌单
-                </el-button>
+        <!-- 歌单列表 -->
+        <div class="content-section">
+          <div class="section-title">
+            <span>我的歌单 ({{ playlists.length }})</span>
+            <el-radio-group v-model="filterPlatform" size="small">
+              <el-radio-button label="all">全部</el-radio-button>
+              <el-radio-button label="netease">网易云</el-radio-button>
+              <el-radio-button label="qq">QQ 音乐</el-radio-button>
+              <el-radio-button label="qishui">汽水音乐</el-radio-button>
+            </el-radio-group>
+          </div>
+
+          <div class="playlist-grid" v-if="filteredPlaylists.length > 0">
+            <div
+              class="playlist-card"
+              v-for="playlist in filteredPlaylists"
+              :key="playlist.id"
+            >
+              <div class="cover">🎵</div>
+              <div class="info">
+                <h3>{{ playlist.name }}</h3>
+                <p>
+                  <span
+                    class="tag-platform"
+                    :class="'tag-platform-' + playlist.platform"
+                  >
+                    {{ platformName(playlist.platform) }}
+                  </span>
+                  {{ playlist.songs }} 首歌曲
+                </p>
+                <p>📁 风格：{{ playlist.style }}</p>
+                <p>⏱️ 最后下载：{{ playlist.lastDownload || '从未' }}</p>
+              </div>
+              <div class="actions">
+                <el-button
+                  type="primary"
+                  size="small"
+                  @click="downloadPlaylist(playlist)"
+                  >下载</el-button
+                >
+                <el-button size="small" @click="editPlaylist(playlist)"
+                  >编辑</el-button
+                >
+                <el-button
+                  type="danger"
+                  size="small"
+                  @click="deletePlaylist(playlist)"
+                  >删除</el-button
+                >
+              </div>
             </div>
+          </div>
 
-            <!-- 歌单列表 -->
-            <div class="content-section">
-                <div class="section-title">
-                    <span>我的歌单 ({{ playlists.length }})</span>
-                    <el-radio-group v-model="filterPlatform" size="small">
-                        <el-radio-button label="all">全部</el-radio-button>
-                        <el-radio-button label="netease">网易云</el-radio-button>
-                        <el-radio-button label="qq">QQ 音乐</el-radio-button>
-                        <el-radio-button label="qishui">汽水音乐</el-radio-button>
-                    </el-radio-group>
-                </div>
-
-                <div class="playlist-grid" v-if="filteredPlaylists.length > 0">
-                    <div class="playlist-card" v-for="playlist in filteredPlaylists" :key="playlist.id">
-                        <div class="cover">🎵</div>
-                        <div class="info">
-                            <h3>{{ playlist.name }}</h3>
-                            <p>
-                                <span class="tag-platform" :class="'tag-platform-' + playlist.platform">
-                                    {{ platformName(playlist.platform) }}
-                                </span>
-                                {{ playlist.songs }} 首歌曲
-                            </p>
-                            <p>📁 风格：{{ playlist.style }}</p>
-                            <p>⏱️ 最后下载：{{ playlist.lastDownload || '从未' }}</p>
-                        </div>
-                        <div class="actions">
-                            <el-button type="primary" size="small" @click="downloadPlaylist(playlist)">下载</el-button>
-                            <el-button size="small" @click="editPlaylist(playlist)">编辑</el-button>
-                            <el-button type="danger" size="small" @click="deletePlaylist(playlist)">删除</el-button>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="empty-state" v-else>
-                    <div class="icon">📀</div>
-                    <p>暂无歌单</p>
-                    <p>点击右上角按钮添加第一个歌单</p>
-                </div>
-            </div>
+          <div class="empty-state" v-else>
+            <div class="icon">📀</div>
+            <p>暂无歌单</p>
+            <p>点击右上角按钮添加第一个歌单</p>
+          </div>
         </div>
+      </div>
     </div>
 
     <!-- 添加歌单对话框 -->
     <el-dialog v-model="showAddDialog" title="添加歌单" width="500px">
-        <el-form :model="newPlaylist" label-width="80px">
-            <el-form-item label="平台" required>
-                <el-select v-model="newPlaylist.platform" placeholder="选择平台" style="width: 100%;">
-                    <el-option label="网易云音乐" value="netease"></el-option>
-                    <el-option label="QQ 音乐" value="qq"></el-option>
-                    <el-option label="汽水音乐" value="qishui"></el-option>
-                </el-select>
-            </el-form-item>
-            <el-form-item label="歌单名称" required>
-                <el-input v-model="newPlaylist.name" placeholder="输入歌单名称"></el-input>
-            </el-form-item>
-            <el-form-item label="歌单链接" required>
-                <el-input v-model="newPlaylist.url" placeholder="粘贴歌单链接"></el-input>
-            </el-form-item>
-            <el-form-item label="音乐风格">
-                <el-select v-model="newPlaylist.style" placeholder="选择风格" style="width: 100%;">
-                    <el-option label="华语流行" value="华语流行"></el-option>
-                    <el-option label="网络热歌" value="网络热歌"></el-option>
-                    <el-option label="欧美流行" value="欧美流行"></el-option>
-                    <el-option label="日韩音乐" value="日韩音乐"></el-option>
-                    <el-option label="古典音乐" value="古典音乐"></el-option>
-                    <el-option label="混合" value="混合"></el-option>
-                </el-select>
-            </el-form-item>
-            <el-form-item label="自动下载">
-                <el-switch v-model="newPlaylist.autoDownload"></el-switch>
-            </el-form-item>
-        </el-form>
-        <template #footer>
-            <el-button @click="showAddDialog = false">取消</el-button>
-            <el-button type="primary" @click="handleAdd">添加</el-button>
-        </template>
+      <el-form :model="newPlaylist" label-width="80px">
+        <el-form-item label="平台" required>
+          <el-select
+            v-model="newPlaylist.platform"
+            placeholder="选择平台"
+            style="width: 100%"
+          >
+            <el-option label="网易云音乐" value="netease"></el-option>
+            <el-option label="QQ 音乐" value="qq"></el-option>
+            <el-option label="汽水音乐" value="qishui"></el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="歌单名称" required>
+          <el-input
+            v-model="newPlaylist.name"
+            placeholder="输入歌单名称"
+          ></el-input>
+        </el-form-item>
+        <el-form-item label="歌单链接" required>
+          <el-input
+            v-model="newPlaylist.url"
+            placeholder="粘贴歌单链接"
+          ></el-input>
+        </el-form-item>
+        <el-form-item label="音乐风格">
+          <el-select
+            v-model="newPlaylist.style"
+            placeholder="选择风格"
+            style="width: 100%"
+          >
+            <el-option label="华语流行" value="华语流行"></el-option>
+            <el-option label="网络热歌" value="网络热歌"></el-option>
+            <el-option label="欧美流行" value="欧美流行"></el-option>
+            <el-option label="日韩音乐" value="日韩音乐"></el-option>
+            <el-option label="古典音乐" value="古典音乐"></el-option>
+            <el-option label="混合" value="混合"></el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="自动下载">
+          <el-switch v-model="newPlaylist.autoDownload"></el-switch>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showAddDialog = false">取消</el-button>
+        <el-button type="primary" @click="handleAdd">添加</el-button>
+      </template>
     </el-dialog>
 
     <script src="https://cdn.jsdelivr.net/npm/vue@3"></script>
     <script src="https://cdn.jsdelivr.net/npm/element-plus"></script>
     <script>
-        const { createApp, reactive, ref, computed, onMounted } = Vue;
-        
-        const app = createApp({
-            setup() {
-                const currentPage = ref('playlists');
-                const showAddDialog = ref(false);
-                const filterPlatform = ref('all');
-                
-                const playlists = ref([
-                    {
-                        id: 1,
-                        name: '我喜欢的音乐',
-                        platform: 'qishui',
-                        songs: 156,
-                        style: '混合',
-                        lastDownload: '2 小时前',
-                        url: 'https://qishui.douyin.com/s/i9wXxJGq/'
-                    },
-                    {
-                        id: 2,
-                        name: '周杰伦经典',
-                        platform: 'netease',
-                        songs: 203,
-                        style: '华语流行',
-                        lastDownload: '昨天',
-                        url: 'https://music.163.com/#/playlist?id=123456'
-                    },
-                    {
-                        id: 3,
-                        name: '抖音热歌榜',
-                        platform: 'qq',
-                        songs: 100,
-                        style: '网络热歌',
-                        lastDownload: '3 天前',
-                        url: 'https://y.qq.com/n/ryqq/playlist/1234567890'
-                    }
-                ]);
-                
-                const newPlaylist = reactive({
-                    platform: 'netease',
-                    name: '',
-                    url: '',
-                    style: '混合',
-                    autoDownload: false
-                });
-                
-                const filteredPlaylists = computed(() => {
-                    if (filterPlatform.value === 'all') {
-                        return playlists.value;
-                    }
-                    return playlists.value.filter(p => p.platform === filterPlatform.value);
-                });
-                
-                const platformName = (platform) => {
-                    const names = {
-                        'netease': '网易云',
-                        'qq': 'QQ 音乐',
-                        'qishui': '汽水音乐'
-                    };
-                    return names[platform] || platform;
-                };
-                
-                const downloadPlaylist = (playlist) => {
-                    ElementPlus.ElMessage.info(`开始下载：${playlist.name}`);
-                    // TODO: 调用下载 API
-                };
-                
-                const editPlaylist = (playlist) => {
-                    ElementPlus.ElMessage.info(`编辑：${playlist.name}`);
-                    // TODO: 打开编辑对话框
-                };
-                
-                const deletePlaylist = (playlist) => {
-                    ElementPlus.ElMessageBox.confirm(
-                        `确定要删除歌单"${playlist.name}"吗？`,
-                        '确认删除',
-                        { type: 'warning' }
-                    ).then(() => {
-                        playlists.value = playlists.value.filter(p => p.id !== playlist.id);
-                        ElementPlus.ElMessage.success('删除成功');
-                    }).catch(() => {});
-                };
-                
-                const handleAdd = () => {
-                    if (!newPlaylist.name || !newPlaylist.url) {
-                        ElementPlus.ElMessage.error('请填写必填项');
-                        return;
-                    }
-                    
-                    const id = playlists.value.length + 1;
-                    playlists.value.push({
-                        id,
-                        ...newPlaylist,
-                        songs: 0,
-                        lastDownload: null
-                    });
-                    
-                    ElementPlus.ElMessage.success('添加成功');
-                    showAddDialog.value = false;
-                    
-                    // 重置表单
-                    newPlaylist.name = '';
-                    newPlaylist.url = '';
-                    newPlaylist.platform = 'netease';
-                    newPlaylist.style = '混合';
-                    newPlaylist.autoDownload = false;
-                };
-                
-                const logout = () => {
-                    localStorage.removeItem('token');
-                    window.location.href = '/';
-                };
-                
-                return {
-                    currentPage,
-                    showAddDialog,
-                    filterPlatform,
-                    playlists,
-                    filteredPlaylists,
-                    newPlaylist,
-                    platformName,
-                    downloadPlaylist,
-                    editPlaylist,
-                    deletePlaylist,
-                    handleAdd,
-                    logout
-                };
+      const { createApp, reactive, ref, computed, onMounted } = Vue;
+
+      const app = createApp({
+        setup() {
+          const currentPage = ref("playlists");
+          const showAddDialog = ref(false);
+          const filterPlatform = ref("all");
+
+          const playlists = ref([
+            {
+              id: 1,
+              name: "我喜欢的音乐",
+              platform: "qishui",
+              songs: 156,
+              style: "混合",
+              lastDownload: "2 小时前",
+              url: "https://qishui.douyin.com/s/i9wXxJGq/",
+            },
+            {
+              id: 2,
+              name: "周杰伦经典",
+              platform: "netease",
+              songs: 203,
+              style: "华语流行",
+              lastDownload: "昨天",
+              url: "https://music.163.com/#/playlist?id=123456",
+            },
+            {
+              id: 3,
+              name: "抖音热歌榜",
+              platform: "qq",
+              songs: 100,
+              style: "网络热歌",
+              lastDownload: "3 天前",
+              url: "https://y.qq.com/n/ryqq/playlist/1234567890",
+            },
+          ]);
+
+          const newPlaylist = reactive({
+            platform: "netease",
+            name: "",
+            url: "",
+            style: "混合",
+            autoDownload: false,
+          });
+
+          const filteredPlaylists = computed(() => {
+            if (filterPlatform.value === "all") {
+              return playlists.value;
             }
-        });
-        
-        app.use(ElementPlus);
-        app.mount('.app-container');
+            return playlists.value.filter(
+              (p) => p.platform === filterPlatform.value,
+            );
+          });
+
+          const platformName = (platform) => {
+            const names = {
+              netease: "网易云",
+              qq: "QQ 音乐",
+              qishui: "汽水音乐",
+            };
+            return names[platform] || platform;
+          };
+
+          const goTo = (path) => {
+            window.location.href = path;
+          };
+
+          const downloadPlaylist = (playlist) => {
+            ElementPlus.ElMessage.info(`开始下载：${playlist.name}`);
+            // TODO: 调用下载 API
+          };
+
+          const editPlaylist = (playlist) => {
+            ElementPlus.ElMessage.info(`编辑：${playlist.name}`);
+            // TODO: 打开编辑对话框
+          };
+
+          const deletePlaylist = (playlist) => {
+            ElementPlus.ElMessageBox.confirm(
+              `确定要删除歌单"${playlist.name}"吗？`,
+              "确认删除",
+              { type: "warning" },
+            )
+              .then(() => {
+                playlists.value = playlists.value.filter(
+                  (p) => p.id !== playlist.id,
+                );
+                ElementPlus.ElMessage.success("删除成功");
+              })
+              .catch(() => {});
+          };
+
+          const handleAdd = () => {
+            if (!newPlaylist.name || !newPlaylist.url) {
+              ElementPlus.ElMessage.error("请填写必填项");
+              return;
+            }
+
+            const id = playlists.value.length + 1;
+            playlists.value.push({
+              id,
+              ...newPlaylist,
+              songs: 0,
+              lastDownload: null,
+            });
+
+            ElementPlus.ElMessage.success("添加成功");
+            showAddDialog.value = false;
+
+            // 重置表单
+            newPlaylist.name = "";
+            newPlaylist.url = "";
+            newPlaylist.platform = "netease";
+            newPlaylist.style = "混合";
+            newPlaylist.autoDownload = false;
+          };
+
+          const logout = () => {
+            localStorage.removeItem("token");
+            window.location.href = "/";
+          };
+
+          return {
+            currentPage,
+            goTo,
+            showAddDialog,
+            filterPlatform,
+            playlists,
+            filteredPlaylists,
+            newPlaylist,
+            platformName,
+            downloadPlaylist,
+            editPlaylist,
+            deletePlaylist,
+            handleAdd,
+            logout,
+          };
+        },
+      });
+
+      app.use(ElementPlus);
+      app.mount(".app-container");
     </script>
-</body>
+  </body>
 </html>

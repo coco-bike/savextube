@@ -106,22 +106,22 @@
       <div class="sidebar">
         <div class="logo">🎵 SaveXTube</div>
         <div class="menu">
-          <div class="menu-item" @click="currentPage = 'dashboard'">
+          <div class="menu-item" @click="goTo('/dashboard')">
             <span>📊</span> 仪表盘
           </div>
-          <div class="menu-item" @click="currentPage = 'playlists'">
+          <div class="menu-item" @click="goTo('/playlists')">
             <span>📀</span> 歌单管理
           </div>
-          <div class="menu-item" @click="currentPage = 'search'">
+          <div class="menu-item" @click="goTo('/search')">
             <span>🔍</span> TG 频道搜索
           </div>
-          <div class="menu-item" @click="currentPage = 'tasks'">
+          <div class="menu-item" @click="goTo('/tasks')">
             <span>📥</span> 下载任务
           </div>
-          <div class="menu-item active" @click="currentPage = 'settings'">
+          <div class="menu-item active" @click="goTo('/settings')">
             <span>⚙️</span> 系统设置
           </div>
-          <div class="menu-item" @click="currentPage = 'setup'">
+          <div class="menu-item" @click="goTo('/setup')">
             <span>🔧</span> Setup
           </div>
           <div
@@ -444,6 +444,10 @@
             }
           };
 
+          const goTo = (path) => {
+            window.location.href = path;
+          };
+
           const logout = () => {
             localStorage.removeItem("token");
             window.location.href = "/";
@@ -455,6 +459,7 @@
 
           return {
             currentPage,
+            goTo,
             settings,
             channelOptions,
             saveSettings,
