@@ -104,11 +104,11 @@ ARG TARGETARCH
 
 RUN cd /tmp && \
     if [ "$TARGETARCH" = "amd64" ]; then \
-        wget https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz; \
+    wget https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz; \
     elif [ "$TARGETARCH" = "arm64" ]; then \
-        wget https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-arm64-static.tar.xz; \
+    wget https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-arm64-static.tar.xz; \
     else \
-        echo "Unsupported arch: $TARGETARCH" && exit 1; \
+    echo "Unsupported arch: $TARGETARCH" && exit 1; \
     fi && \
     tar -xf ffmpeg-release-${TARGETARCH}-static.tar.xz && \
     cp ffmpeg-*-static/ffmpeg /usr/local/bin/ && \
@@ -126,9 +126,9 @@ COPY . .
 RUN mkdir -p /downloads/x /downloads/youtube \
     && chmod -R 777 /downloads
 
-# 设置健康检查
+# 设置健康检查（Flask 服务运行在 8530 端口）
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/ || exit 1
+    CMD curl -f http://localhost:8530/ || exit 1
 
 # 设置入口点
 ENTRYPOINT ["python3", "main.py"]

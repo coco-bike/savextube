@@ -1,0 +1,71 @@
+2026-03-17 15:29:18 - savextube - INFO - 🔍 开始启动前环境检查...
+2026-03-17 15:29:18 - modules.config.toml_config - WARNING - ⚠️ 配置文件不存在: /app/config/savextube.toml
+2026-03-17 15:29:18 - savextube - WARNING - ⚠️ TOML 配置文件不存在或读取失败，将使用环境变量
+2026-03-17 15:29:18 - savextube - INFO - 🔧 使用环境变量配置
+2026-03-17 15:29:18 - savextube - ERROR - ❌ 请在 TOML 配置文件或环境变量中设置 TELEGRAM_BOT_TOKEN
+2026-03-17 15:29:18 - savextube - INFO - 机器人已停止。
+2026-03-17 15:45:19 - savextube - INFO - 🔍 开始启动前环境检查...
+2026-03-17 15:45:19 - modules.config.toml_config - WARNING - ⚠️ 配置文件不存在: /app/config/savextube.toml
+2026-03-17 15:45:19 - savextube - WARNING - ⚠️ TOML 配置文件不存在或读取失败，将使用环境变量
+2026-03-17 15:45:19 - savextube - INFO - 🔧 使用环境变量配置
+2026-03-17 15:45:19 - savextube - ERROR - ❌ 请在 TOML 配置文件或环境变量中设置 TELEGRAM_BOT_TOKEN
+2026-03-17 15:45:19 - savextube - INFO - 机器人已停止。
+2026-03-17 18:57:41 - web.tg_setup - INFO - 找到配置文件: savextube.toml
+2026-03-17 18:57:41 - modules.config.toml_config - INFO - 📖 正在读取配置文件: savextube.toml
+2026-03-17 18:57:41 - modules.config.toml_config - INFO - ✅ 成功读取配置文件，包含 10 个配置段
+2026-03-17 18:57:41 - modules.config.toml_config - INFO -    📁 配置段: telegram
+2026-03-17 18:57:41 - modules.config.toml_config - INFO -    📁 配置段: proxy
+2026-03-17 18:57:41 - modules.config.toml_config - INFO -    📁 配置段: netease
+2026-03-17 18:57:41 - modules.config.toml_config - INFO -    📁 配置段: apple_music
+2026-03-17 18:57:41 - modules.config.toml_config - INFO -    📁 配置段: bilibili
+2026-03-17 18:57:41 - modules.config.toml_config - INFO -    📁 配置段: qbittorrent
+2026-03-17 18:57:41 - modules.config.toml_config - INFO -    📁 配置段: logging
+2026-03-17 18:57:41 - modules.config.toml_config - INFO -    📁 配置段: youtube
+2026-03-17 18:57:41 - modules.config.toml_config - INFO -    📁 配置段: multithread
+2026-03-17 18:57:41 - modules.config.toml_config - INFO -    📁 配置段: channels
+2026-03-17 18:57:41 - web.tg_setup - INFO - 调试信息 - proxy_config: {'proxy_host': ''}
+2026-03-17 18:57:41 - web.tg_setup - INFO - 调试信息 - proxy_host: ''
+2026-03-17 18:57:41 - web.tg_setup - INFO - TOML配置中未设置代理或代理被注释
+2026-03-17 18:57:41 - web.tg_setup - INFO - 🔍 发送验证码到: +8613800000000
+2026-03-17 18:57:41 - web.tg_setup - ERROR - 子进程执行失败，返回码: 1, 错误: SyntaxError: Non-UTF-8 code starting with '\xc5' in file C:\Users\xyyl\AppData\Local\Temp\tmp1n7wejj_.py on line 10, but no encoding declared; see https://peps.python.org/pep-0263/ for details
+2026-03-17 18:59:03 - web.tg_setup - INFO - 找到配置文件: savextube.toml
+2026-03-17 18:59:03 - modules.config.toml_config - INFO - 📖 正在读取配置文件: savextube.toml
+2026-03-17 18:59:03 - modules.config.toml_config - INFO - ✅ 成功读取配置文件，包含 10 个配置段
+2026-03-17 18:59:03 - modules.config.toml_config - INFO -    📁 配置段: telegram
+2026-03-17 18:59:03 - modules.config.toml_config - INFO -    📁 配置段: proxy
+2026-03-17 18:59:03 - modules.config.toml_config - INFO -    📁 配置段: netease
+2026-03-17 18:59:03 - modules.config.toml_config - INFO -    📁 配置段: apple_music
+2026-03-17 18:59:03 - modules.config.toml_config - INFO -    📁 配置段: bilibili
+2026-03-17 18:59:03 - modules.config.toml_config - INFO -    📁 配置段: qbittorrent
+2026-03-17 18:59:03 - modules.config.toml_config - INFO -    📁 配置段: logging
+2026-03-17 18:59:03 - modules.config.toml_config - INFO -    📁 配置段: youtube
+2026-03-17 18:59:03 - modules.config.toml_config - INFO -    📁 配置段: multithread
+2026-03-17 18:59:03 - modules.config.toml_config - INFO -    📁 配置段: channels
+2026-03-17 18:59:03 - web.tg_setup - INFO - 调试信息 - proxy_config: {'proxy_host': ''}
+2026-03-17 18:59:03 - web.tg_setup - INFO - 调试信息 - proxy_host: ''
+2026-03-17 18:59:03 - web.tg_setup - INFO - TOML配置中未设置代理或代理被注释
+2026-03-17 18:59:03 - web.tg_setup - INFO - 🔍 发送验证码到: +8613800000000
+2026-03-17 18:59:52 - web.tg_setup - INFO - 子进程标准输出: # 未设置代理，使用直连
+{"ok": false, "error": "Connection to Telegram failed 3 time(s)"}
+2026-03-17 18:59:52 - web.tg_setup - INFO - 子进程错误输出: Attempt 1 at connecting failed: TimeoutError: 
+Attempt 2 at connecting failed: TimeoutError: 
+Attempt 3 at connecting failed: TimeoutError: 
+Attempt 4 at connecting failed: TimeoutError:
+2026-03-17 19:33:42 - savextube - INFO - 🔍 开始启动前环境检查...
+2026-03-17 19:33:42 - modules.config.toml_config - WARNING - ⚠️ 配置文件不存在: /app/config/savextube.toml
+2026-03-17 19:33:42 - savextube - WARNING - ⚠️ TOML 配置文件不存在或读取失败，将使用环境变量
+2026-03-17 19:33:42 - savextube - INFO - 🔧 使用环境变量配置
+2026-03-17 19:33:42 - savextube - ERROR - ❌ 请在 TOML 配置文件或环境变量中设置 TELEGRAM_BOT_TOKEN
+2026-03-17 19:33:42 - savextube - INFO - 机器人已停止。
+2026-03-17 19:40:43 - savextube - INFO - 🔍 开始启动前环境检查...
+2026-03-17 19:40:43 - modules.config.toml_config - WARNING - ⚠️ 配置文件不存在: /app/config/savextube.toml
+2026-03-17 19:40:43 - savextube - WARNING - ⚠️ TOML 配置文件不存在或读取失败，将使用环境变量
+2026-03-17 19:40:43 - savextube - INFO - 🔧 使用环境变量配置
+2026-03-17 19:40:43 - savextube - ERROR - ❌ 请在 TOML 配置文件或环境变量中设置 TELEGRAM_BOT_TOKEN
+2026-03-17 19:40:43 - savextube - INFO - 机器人已停止。
+2026-03-17 20:14:30 - savextube - INFO - 🔍 开始启动前环境检查...
+2026-03-17 20:14:30 - modules.config.toml_config - WARNING - ⚠️ 配置文件不存在: /app/config/savextube.toml
+2026-03-17 20:14:30 - savextube - WARNING - ⚠️ TOML 配置文件不存在或读取失败，将使用环境变量
+2026-03-17 20:14:30 - savextube - INFO - 🔧 使用环境变量配置
+2026-03-17 20:14:30 - savextube - ERROR - ❌ 请在 TOML 配置文件或环境变量中设置 TELEGRAM_BOT_TOKEN
+2026-03-17 20:14:30 - savextube - INFO - 机器人已停止。

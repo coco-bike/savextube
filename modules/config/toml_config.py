@@ -196,12 +196,13 @@ def get_qbittorrent_config(config: Dict[str, Any]) -> Dict[str, Any]:
         qBittorrent 配置字典
     """
     qb_config = config.get('qbittorrent', {})
-    
+
     return {
-        'host': qb_config.get('qb_host', '192.168.2.134'),
-        'port': qb_config.get('qb_port', 8988),
-        'username': qb_config.get('qb_username', 'admin'),
-        'password': qb_config.get('qb_password', 'Lixing/87'),
+        # 仅在用户明确配置时返回值，避免默认值导致程序误判为“已配置 qBittorrent”
+        'host': qb_config.get('qb_host') or '',
+        'port': qb_config.get('qb_port') or '',
+        'username': qb_config.get('qb_username') or '',
+        'password': qb_config.get('qb_password') or '',
     }
 
 def get_logging_config(config: Dict[str, Any]) -> Dict[str, Any]:

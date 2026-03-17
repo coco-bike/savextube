@@ -179,17 +179,8 @@
           <div class="menu-item active" @click="goTo('/dashboard')">
             <span>📊</span> 仪表盘
           </div>
-          <div class="menu-item" @click="goTo('/playlists')">
-            <span>📀</span> 歌单管理
-          </div>
-          <div class="menu-item" @click="goTo('/search')">
-            <span>🔍</span> TG 频道搜索
-          </div>
           <div class="menu-item" @click="goTo('/tasks')">
             <span>📥</span> 下载任务
-          </div>
-          <div class="menu-item" @click="goTo('/settings')">
-            <span>⚙️</span> 系统设置
           </div>
           <div class="menu-item" @click="goTo('/setup')">
             <span>🔧</span> Setup
@@ -294,18 +285,18 @@
           const recentTasks = ref([
             {
               id: 1,
-              title: "我喜欢的音乐 - 汽水音乐",
-              type: "歌单下载",
-              songs: 45,
-              time: "15 分钟",
+              title: "示例任务 A",
+              type: "常规下载",
+              songs: 12,
+              time: "5 分钟",
               progress: 100,
               statusClass: "success",
               statusText: "已完成",
             },
             {
               id: 2,
-              title: "告白气球 - 周杰伦",
-              type: "TG 频道搜索",
+              title: "示例任务 B",
+              type: "常规下载",
               songs: 1,
               time: "45 秒",
               progress: 100,
@@ -314,9 +305,9 @@
             },
             {
               id: 3,
-              title: "抖音热歌榜 - QQ 音乐",
-              type: "歌单下载",
-              songs: 23,
+              title: "示例任务 C",
+              type: "批量下载",
+              songs: 28,
               time: "8 分钟",
               progress: 65,
               statusClass: "processing",

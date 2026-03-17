@@ -5,6 +5,7 @@
 """
 
 import os
+import sys
 import json
 import time
 import logging
@@ -23,12 +24,12 @@ logger = logging.getLogger(__name__)
 def get_proxy_from_config():
     """从TOML配置文件中读取代理设置"""
     try:
-        # 尝试多个可能的配置文件路径
+        # 优先读取容器挂载配置，再回退到项目内配置
         config_paths = [
+            "/app/config/savextube.toml",
             "savextube.toml",
             "../savextube.toml", 
             "../../savextube.toml",
-            "/app/config/savextube.toml"
         ]
         
         for config_path in config_paths:
@@ -44,7 +45,7 @@ def get_proxy_from_config():
                         logger.info(f"从TOML配置读取代理: {proxy_host}")
                         return proxy_host
                     else:
-                        logger.info(f"TOML配置中未设置代理或代理被注释")
+                        logger.info(f"TOML配置中未设置代理或代理被注释，来源文件: {config_path}")
                         return None
                 break
         else:
@@ -58,11 +59,23 @@ def get_proxy_from_config():
 def create_blueprint(static_dir: str) -> Blueprint:
     """创建简化的蓝图"""
     bp = Blueprint("tg_setup", __name__, url_prefix="")
+    # 使用传入的 static_dir，不转换为绝对路径
+    templates_dir = os.path.join(static_dir, "templates")
+
+    logger.info(f"🔍 tg_setup 蓝图路径: static_dir={static_dir}, templates_dir={templates_dir}")
+    logger.info(f"🔍 setup.html 存在: {os.path.exists(os.path.join(templates_dir, 'setup.html'))}")
 
     @bp.get("/setup")
     def serve_setup_page():
-        """提供前端页面"""
-        return send_from_directory(static_dir, "setup.html")
+        """提供统一的 setup 页面，仅使用 web/templates/setup.html"""
+        setup_path = os.path.join(templates_dir, "setup.html")
+        logger.info(f"🔍 请求 /setup, 文件路径: {setup_path}, 存在: {os.path.exists(setup_path)}")
+        if os.path.exists(setup_path):
+            return send_from_directory(templates_dir, "setup.html")
+        return jsonify({
+            "ok": False,
+            "error": f"缺少 web/templates/setup.html，无法加载 Setup 页面，查找路径: {setup_path}"
+        }), 500
     
     @bp.get("/<filename>")
     def serve_static_files(filename):
@@ -90,7 +103,8 @@ def create_blueprint(static_dir: str) -> Blueprint:
             logger.info(f"🔍 发送验证码到: {phone}")
 
             # 创建临时Python脚本
-            script_content = f'''import asyncio
+            script_content = f'''# -*- coding: utf-8 -*-
+import asyncio
 import json
 import sys
 from telethon import TelegramClient
@@ -163,7 +177,7 @@ asyncio.run(send_code())
 '''
             
             # 写入临时文件
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, encoding='utf-8', newline='\n') as f:
                 f.write(script_content)
                 script_path = f.name
             
@@ -251,7 +265,8 @@ asyncio.run(send_code())
             logger.info(f"🔍 phone_code_hash: {phone_code_hash}")
 
             # 创建临时Python脚本
-            script_content = f'''import asyncio
+            script_content = f'''# -*- coding: utf-8 -*-
+import asyncio
 import json
 import sys
 from telethon import TelegramClient
@@ -319,7 +334,7 @@ asyncio.run(confirm_code())
 '''
             
             # 写入临时文件
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, encoding='utf-8', newline='\n') as f:
                 f.write(script_content)
                 script_path = f.name
             
@@ -385,25 +400,73 @@ asyncio.run(confirm_code())
         try:
             data = request.get_json() or {}
             session_string = data.get("session_string")
-            
+
             if not session_string:
                 return jsonify({"ok": False, "error": "missing session_string"}), 400
 
-            # 硬编码session文件保存路径到/app/cookies目录
-            session_dir = "/app/cookies"
+            # 使用项目根目录下的 cookies 目录
+            project_root = os.path.dirname(os.path.dirname(__file__))
+            session_dir = os.path.join(project_root, "cookies")
             session_file_path = os.path.join(session_dir, "telethon_session.txt")
-            
+
             # 确保目录存在
             os.makedirs(session_dir, exist_ok=True)
-            
+
             with open(session_file_path, "w") as f:
                 f.write(session_string.strip())
 
             return jsonify({"ok": True, "saved_to": session_file_path})
-            
+
         except Exception as e:
             logger.error(f"❌ 保存会话失败: {e}")
             return jsonify({"ok": False, "error": str(e)})
+
+    @bp.get("/check_session")
+    def check_session():
+        """检查会话文件是否存在"""
+        logger.info(f"=== 检查会话文件开始 ===")
+        logger.info(f"当前工作目录: {os.getcwd()}")
+        logger.info(f"__file__ 值: {__file__}")
+        
+        # 使用与保存时相同的路径逻辑 - 统一使用项目根目录下的 cookies
+        project_root = os.path.dirname(os.path.dirname(__file__))
+        session_file_path = os.path.join(project_root, "cookies", "telethon_session.txt")
+        
+        logger.info(f"项目根目录: {project_root}")
+        logger.info(f"检查会话文件路径: {session_file_path}")
+        logger.info(f"标准化路径: {os.path.normpath(session_file_path)}")
+        logger.info(f"绝对路径: {os.path.abspath(session_file_path)}")
+        logger.info(f"文件是否存在: {os.path.exists(session_file_path)}")
+        
+        # 检查各个目录层级
+        logger.info(f"项目根目录存在: {os.path.exists(project_root)}")
+        cookies_dir = os.path.join(project_root, "cookies")
+        logger.info(f"Cookies目录存在: {os.path.exists(cookies_dir)}")
+        if os.path.exists(cookies_dir):
+            try:
+                cookies_files = os.listdir(cookies_dir)
+                logger.info(f"Cookies目录内容: {cookies_files}")
+            except Exception as e:
+                logger.error(f"读取cookies目录失败: {e}")
+        
+        if os.path.exists(session_file_path):
+            # 验证会话字符串格式
+            try:
+                with open(session_file_path, "r", encoding='utf-8') as f:
+                    content = f.read().strip()
+                    logger.info(f"会话文件内容长度: {len(content)}, 内容预览: {repr(content[:50])}...")
+                    if content and len(content) > 10:  # 基本验证
+                        logger.info("✅ 检测到有效会话文件")
+                        return jsonify({"exists": True, "message": "会话文件已存在"})
+                    else:
+                        logger.info("❌ 会话文件内容不符合要求")
+            except Exception as e:
+                logger.error(f"检查会话文件时出错: {e}", exc_info=True)
+        else:
+            logger.info("❌ 会话文件不存在")
+        
+        logger.info("=== 检查会话文件结束 ===")
+        return jsonify({"exists": False, "message": "会话文件不存在"})
 
     return bp
 
@@ -418,5 +481,9 @@ if __name__ == "__main__":
     # 单独运行时使用固定端口；被 main.py 托管时忽略
     setup_port = 8530
     app.run(host='0.0.0.0', port=setup_port, debug=False, use_reloader=False)
+
+
+
+
 
 

@@ -397,12 +397,21 @@ app = Flask(__name__, static_folder="web", static_url_path="/web")
 # 注册 Telethon Web 蓝图（用于生成 Session String）——按你的要求，固定使用 web/tg_setup.py
 try:
     import os as _os
-    _static_dir_abs = _os.path.join(_os.path.dirname(__file__), "web")
+    _static_dir = _os.path.join(_os.path.dirname(__file__), "web")
     from web.tg_setup import create_blueprint as _tg_create_bp
-    app.register_blueprint(_tg_create_bp(static_dir=_static_dir_abs))
-    logging.getLogger(__name__).info("✅ /setup 已由主进程Flask托管（使用 web/tg_setup.py）")
+    app.register_blueprint(_tg_create_bp(static_dir=_static_dir))
+    logging.getLogger(__name__).info(f"✅ /setup 已由主进程Flask托管（使用 web/tg_setup.py），路径: {_static_dir}")
 except Exception as _e:
     logging.getLogger(__name__).warning(f"⚠️ 注册 /setup 失败: {_e}")
+
+# 注册 Web UI 蓝图（登录、仪表盘、任务等页面）
+try:
+    from web.flask_web_ui import create_web_ui_blueprint as _ui_create_bp
+    _ui_static_dir = os.path.join(os.path.dirname(__file__), "web", "templates")
+    app.register_blueprint(_ui_create_bp(static_dir=_ui_static_dir))
+    logging.getLogger(__name__).info(f"✅ Web UI 已注册（登录、仪表盘、任务），路径: {_ui_static_dir}")
+except Exception as _e:
+    logging.getLogger(__name__).warning(f"⚠️ 注册 Web UI 失败：{_e}")
 
 # 尝试导入 gallery-dl
 try:
@@ -5069,6 +5078,7 @@ class TelegramBot:
             "password": None,
             "enabled": False,  # 默认禁用
         }
+        qb_config_loaded_from_toml = False
 
         # 尝试从TOML配置文件读取qBittorrent配置
         toml_config = None
@@ -5090,15 +5100,18 @@ class TelegramBot:
                             qb_toml_config = get_qbittorrent_config(toml_config)
                             if qb_toml_config and all(qb_toml_config.values()):
                                 self.qb_config.update(qb_toml_config)
+                                qb_config_loaded_from_toml = True
                                 logger.info(f"✅ 从TOML配置文件成功读取qBittorrent配置: {config_path}")
                                 break
             except Exception as e:
                 logger.warning(f"⚠️ 从TOML配置文件读取qBittorrent配置失败: {e}")
 
-        # 如果TOML配置不完整，尝试从环境变量读取
-        if not all([self.qb_config["host"], self.qb_config["port"], 
-                   self.qb_config["username"], self.qb_config["password"]]):
-            logger.info("📖 从环境变量读取qBittorrent配置")
+        # 如果TOML没有成功加载到完整配置，则可选地从环境变量读取。
+        # 为避免“残留 QB_* 环境变量”导致程序误连 qBittorrent，
+        # 这里要求显式设置 QB_ENABLED=true 才启用环境变量回退。
+        qb_env_enabled = os.getenv("QB_ENABLED", "").strip().lower() in {"1", "true", "yes", "on"}
+        if not qb_config_loaded_from_toml and qb_env_enabled:
+            logger.info("📖 QB_ENABLED=true，尝试从环境变量读取qBittorrent配置")
             env_config = {
                 "host": os.getenv("QB_HOST"),
                 "port": os.getenv("QB_PORT"),
@@ -5110,6 +5123,8 @@ class TelegramBot:
             for key, value in env_config.items():
                 if value and not self.qb_config[key]:
                     self.qb_config[key] = value
+        elif not qb_config_loaded_from_toml:
+            logger.info("ℹ️ 未启用 qBittorrent 环境变量回退（如需启用，请设置 QB_ENABLED=true）")
 
         # 检查是否有完整的 qBittorrent 配置
         if all([
@@ -5472,7 +5487,6 @@ class TelegramBot:
                 BotCommand("status", "📊 查看下载统计"),
                 BotCommand("cancel", "❌ 取消下载任务"),
                 BotCommand("version", "🔧 查看版本信息"),
-                BotCommand("settings", "⚙️ 功能设置"),
                 BotCommand("favsub", "📚 B站收藏夹订阅下载"),
                 BotCommand("cleanup", "🧹 清理临时文件"),
                 BotCommand("reboot", "🔄 重启容器"),
@@ -5748,46 +5762,9 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("status", self.status_command))
         # self.application.add_handler(CommandHandler("sxt", self.sxt_command))
         # # 已删除：sxt命令处理器
-        self.application.add_handler(CommandHandler("settings", self.settings_command))
         self.application.add_handler(CommandHandler("favsub", self.favsub_command))
         self.application.add_handler(CommandHandler("cancel", self.cancel_command))
         self.application.add_handler(CommandHandler("cleanup", self.cleanup_command))
-        self.application.add_handler(
-            CallbackQueryHandler(self.settings_button_handler, pattern="toggle_autop")
-        )
-        self.application.add_handler(
-            CallbackQueryHandler(self.settings_button_handler, pattern="toggle_id_tags")
-        )
-        self.application.add_handler(
-            CallbackQueryHandler(self.settings_button_handler, pattern="toggle_danmaku")
-        )
-        self.application.add_handler(
-            CallbackQueryHandler(self.settings_button_handler, pattern="toggle_audio_mode")
-        )
-        self.application.add_handler(
-            CallbackQueryHandler(self.settings_button_handler, pattern="toggle_ugc_playlist")
-        )
-        self.application.add_handler(
-            CallbackQueryHandler(self.settings_button_handler, pattern="toggle_thumbnail")
-        )
-        self.application.add_handler(
-            CallbackQueryHandler(self.settings_button_handler, pattern="toggle_subtitle")
-        )
-        self.application.add_handler(
-            CallbackQueryHandler(self.settings_button_handler, pattern="toggle_timestamp")
-        )
-        self.application.add_handler(
-            CallbackQueryHandler(self.settings_button_handler, pattern="toggle_bilibili_thumbnail")
-        )
-        self.application.add_handler(
-            CallbackQueryHandler(self.settings_button_handler, pattern="toggle_lyrics_merge")
-        )
-        self.application.add_handler(
-            CallbackQueryHandler(self.settings_button_handler, pattern="toggle_artist_download")
-        )
-        self.application.add_handler(
-            CallbackQueryHandler(self.settings_button_handler, pattern="toggle_cover_download")
-        )
         self.application.add_handler(
             CallbackQueryHandler(self.cancel_task_callback, pattern="cancel:")
         )
@@ -5920,11 +5897,7 @@ class TelegramBot:
 
                 # 配置更强的网络参数
                 await self.application.updater.start_polling(
-                    timeout=30,  # 增加超时时间
-                    read_timeout=30,
-                    write_timeout=30,
-                    connect_timeout=30,
-                    pool_timeout=30
+                    timeout=30  # 增加超时时间
                 )
 
                 logger.info("机器人已成功启动并正在运行。")
@@ -5979,11 +5952,7 @@ class TelegramBot:
 
             # 重新启动polling
             await self.application.updater.start_polling(
-                timeout=30,
-                read_timeout=30,
-                write_timeout=30,
-                connect_timeout=30,
-                pool_timeout=30
+                timeout=30
             )
             logger.info("📡 已重新启动polling")
 
@@ -9626,7 +9595,6 @@ class TelegramBot:
             "• <b>/help</b> - 📖 显示此帮助信息\n"
             "• <b>/status</b> - 📊 查看下载统计和系统状态\n"
             "• <b>/version</b> - 🔧 查看版本信息\n"
-            "• <b>/settings</b> - 🛠 功能设置面板\n"
             "• <b>/favsub</b> - 📚 B站收藏夹订阅管理\n"
             "• <b>/cancel</b> - ❌ 取消当前下载任务\n"
             "• <b>/cleanup</b> - 🧹 清理重复文件\n"
@@ -9657,7 +9625,6 @@ class TelegramBot:
 
             "💡 <b>使用技巧：</b>\n"
             "• 发送播放列表链接可批量下载\n"
-            "• 使用 /settings 调整下载偏好\n"
             "• 大文件会自动分割发送\n"
             "• 支持多种视频质量选择\n"
             "• 可以转发其他聊天中的媒体文件\n\n"
@@ -9670,907 +9637,6 @@ class TelegramBot:
         )
 
         await update.message.reply_text(help_message, parse_mode="HTML")
-
-    async def settings_command(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ):
-        """/settings 命令，显示功能设置按钮"""
-        user_id = update.message.from_user.id
-
-        # 权限检查
-        if not self._check_user_permission(user_id):
-            await update.message.reply_text("❌ 您没有权限使用此机器人")
-            return
-
-        # B站多P自动下载按钮
-        auto_playlist_current = self.bilibili_auto_playlist
-        auto_playlist_text = "✅ B站多P自动下载：开启" if auto_playlist_current else "❌ B站多P自动下载：关闭"
-        auto_playlist_button = InlineKeyboardButton(auto_playlist_text, callback_data="toggle_autop")
-
-        # 油管自动添加标签按钮
-        id_tags_current = self.youtube_id_tags
-        id_tags_text = "✅ 油管自动添加标签：开启" if id_tags_current else "❌ 油管自动添加标签：关闭"
-        id_tags_button = InlineKeyboardButton(id_tags_text, callback_data="toggle_id_tags")
-
-        # YouTube音频模式按钮
-        audio_mode_current = self.youtube_audio_mode
-        audio_mode_text = "✅ 油管音频模式：开启" if audio_mode_current else "❌ 油管音频模式：关闭"
-        audio_mode_button = InlineKeyboardButton(audio_mode_text, callback_data="toggle_audio_mode")
-
-        # B站UGC播放列表自动下载按钮
-        ugc_playlist_current = self.bilibili_ugc_playlist
-        ugc_playlist_text = "✅ B站UGC下载：开启" if ugc_playlist_current else "❌ B站UGC下载：关闭"
-        ugc_playlist_button = InlineKeyboardButton(ugc_playlist_text, callback_data="toggle_ugc_playlist")
-
-        # B站弹幕下载按钮
-        danmaku_current = self.bilibili_danmaku_download
-        danmaku_text = "✅ B站弹幕下载：开启" if danmaku_current else "❌ B站弹幕下载：关闭"
-        danmaku_button = InlineKeyboardButton(danmaku_text, callback_data="toggle_danmaku")
-
-        # YouTube封面下载按钮
-        thumbnail_current = self.youtube_thumbnail_download
-        thumbnail_text = "✅ 油管封面下载：开启" if thumbnail_current else "❌ 油管封面下载：关闭"
-        thumbnail_button = InlineKeyboardButton(thumbnail_text, callback_data="toggle_thumbnail")
-
-        # YouTube字幕下载按钮
-        subtitle_current = self.youtube_subtitle_download
-        subtitle_text = "✅ 油管字幕下载：开启" if subtitle_current else "❌ 油管字幕下载：关闭"
-        subtitle_button = InlineKeyboardButton(subtitle_text, callback_data="toggle_subtitle")
-
-        # YouTube时间戳命名按钮
-        timestamp_current = self.youtube_timestamp_naming
-        timestamp_text = "✅ 油管时间戳命名：开启" if timestamp_current else "❌ 油管时间戳命名：关闭"
-        timestamp_button = InlineKeyboardButton(timestamp_text, callback_data="toggle_timestamp")
-
-        # B站封面下载按钮
-        bilibili_thumbnail_current = self.bilibili_thumbnail_download
-        bilibili_thumbnail_text = "✅ B站封面下载：开启" if bilibili_thumbnail_current else "❌ B站封面下载：关闭"
-        bilibili_thumbnail_button = InlineKeyboardButton(bilibili_thumbnail_text, callback_data="toggle_bilibili_thumbnail")
-
-        # 网易云歌词合并按钮
-        lyrics_merge_current = self.netease_lyrics_merge
-        lyrics_merge_text = "✅ 网易云歌词合并：开启" if lyrics_merge_current else "❌ 网易云歌词合并：关闭"
-        lyrics_merge_button = InlineKeyboardButton(lyrics_merge_text, callback_data="toggle_lyrics_merge")
-
-        # 网易云artist下载按钮
-        artist_download_current = self.netease_artist_download
-        artist_download_text = "✅ 网易云artist下载：开启" if artist_download_current else "❌ 网易云artist下载：关闭"
-        artist_download_button = InlineKeyboardButton(artist_download_text, callback_data="toggle_artist_download")
-
-        # 网易云cover下载按钮
-        cover_download_current = self.netease_cover_download
-        cover_download_text = "✅ 网易云cover下载：开启" if cover_download_current else "❌ 网易云cover下载：关闭"
-        cover_download_button = InlineKeyboardButton(cover_download_text, callback_data="toggle_cover_download")
-
-        reply_markup = InlineKeyboardMarkup([
-            [auto_playlist_button],
-            [id_tags_button],
-            [audio_mode_button],
-            [ugc_playlist_button],
-            [danmaku_button],
-            [thumbnail_button],
-            [subtitle_button],
-            [timestamp_button],
-            [bilibili_thumbnail_button],
-            [lyrics_merge_button],
-            [artist_download_button],
-            [cover_download_button]
-        ])
-        await update.message.reply_text("🛠 功能设置", reply_markup=reply_markup)
-
-    async def settings_button_handler(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ):
-        query = update.callback_query
-        user_id = query.from_user.id
-
-        # 权限检查
-        if not self._check_user_permission(user_id):
-            await query.answer("❌ 您没有权限使用此机器人")
-            return
-
-        callback_data = query.data
-
-        if callback_data == "toggle_autop":
-            # 切换多P自动下载
-            current = self.bilibili_auto_playlist
-            self.bilibili_auto_playlist = not current
-            await self._save_config_async()
-
-            # 重新生成四个按钮
-            auto_playlist_text = "✅ B站多P自动下载：开启" if not current else "❌ B站多P自动下载：关闭"
-            auto_playlist_button = InlineKeyboardButton(auto_playlist_text, callback_data="toggle_autop")
-
-            id_tags_text = "✅ 油管自动添加标签：开启" if self.youtube_id_tags else "❌ 油管自动添加标签：关闭"
-            id_tags_button = InlineKeyboardButton(id_tags_text, callback_data="toggle_id_tags")
-
-            audio_mode_text = "✅ 油管音频模式：开启" if self.youtube_audio_mode else "❌ 油管音频模式：关闭"
-            audio_mode_button = InlineKeyboardButton(audio_mode_text, callback_data="toggle_audio_mode")
-
-            ugc_playlist_text = "✅ B站UGC下载：开启" if self.bilibili_ugc_playlist else "❌ B站UGC下载：关闭"
-            ugc_playlist_button = InlineKeyboardButton(ugc_playlist_text, callback_data="toggle_ugc_playlist")
-
-            danmaku_text = "✅ B站弹幕下载：开启" if self.bilibili_danmaku_download else "❌ B站弹幕下载：关闭"
-            danmaku_button = InlineKeyboardButton(danmaku_text, callback_data="toggle_danmaku")
-
-            thumbnail_text = "✅ 油管封面下载：开启" if self.youtube_thumbnail_download else "❌ 油管封面下载：关闭"
-            thumbnail_button = InlineKeyboardButton(thumbnail_text, callback_data="toggle_thumbnail")
-
-            subtitle_text = "✅ 油管字幕下载：开启" if self.youtube_subtitle_download else "❌ 油管字幕下载：关闭"
-            subtitle_button = InlineKeyboardButton(subtitle_text, callback_data="toggle_subtitle")
-
-            timestamp_text = "✅ 油管时间戳命名：开启" if self.youtube_timestamp_naming else "❌ 油管时间戳命名：关闭"
-            timestamp_button = InlineKeyboardButton(timestamp_text, callback_data="toggle_timestamp")
-
-            bilibili_thumbnail_text = "✅ B站封面下载：开启" if self.bilibili_thumbnail_download else "❌ B站封面下载：关闭"
-            bilibili_thumbnail_button = InlineKeyboardButton(bilibili_thumbnail_text, callback_data="toggle_bilibili_thumbnail")
-
-            lyrics_merge_text = "✅ 网易云歌词合并：开启" if self.netease_lyrics_merge else "❌ 网易云歌词合并：关闭"
-            lyrics_merge_button = InlineKeyboardButton(lyrics_merge_text, callback_data="toggle_lyrics_merge")
-
-            # 网易云artist下载按钮
-            artist_download_text = "✅ 网易云artist下载：开启" if self.netease_artist_download else "❌ 网易云artist下载：关闭"
-            artist_download_button = InlineKeyboardButton(artist_download_text, callback_data="toggle_artist_download")
-
-            # 网易云cover下载按钮
-            cover_download_text = "✅ 网易云cover下载：开启" if self.netease_cover_download else "❌ 网易云cover下载：关闭"
-            cover_download_button = InlineKeyboardButton(cover_download_text, callback_data="toggle_cover_download")
-
-            reply_markup = InlineKeyboardMarkup([
-                [auto_playlist_button],
-                [id_tags_button],
-                [audio_mode_button],
-                [ugc_playlist_button],
-                [danmaku_button],
-                [thumbnail_button],
-                [subtitle_button],
-                [timestamp_button],
-                [bilibili_thumbnail_button],
-                [lyrics_merge_button],
-                [artist_download_button],
-                [cover_download_button]
-            ])
-            await query.edit_message_reply_markup(reply_markup=reply_markup)
-            await query.answer("已切换B站多P自动下载状态")
-
-        elif callback_data == "toggle_id_tags":
-            # 切换ID标签
-            current = self.youtube_id_tags
-            self.youtube_id_tags = not current
-            await self._save_config_async()
-
-            # 重新生成四个按钮
-            auto_playlist_text = "✅ B站多P自动下载：开启" if self.bilibili_auto_playlist else "❌ B站多P自动下载：关闭"
-            auto_playlist_button = InlineKeyboardButton(auto_playlist_text, callback_data="toggle_autop")
-
-            id_tags_text = "✅ 油管自动添加标签：开启" if self.youtube_id_tags else "❌ 油管自动添加标签：关闭"
-            id_tags_button = InlineKeyboardButton(id_tags_text, callback_data="toggle_id_tags")
-
-            audio_mode_text = "✅ 油管音频模式：开启" if self.youtube_audio_mode else "❌ 油管音频模式：关闭"
-            audio_mode_button = InlineKeyboardButton(audio_mode_text, callback_data="toggle_audio_mode")
-
-            ugc_playlist_text = "✅ B站UGC下载：开启" if self.bilibili_ugc_playlist else "❌ B站UGC下载：关闭"
-            ugc_playlist_button = InlineKeyboardButton(ugc_playlist_text, callback_data="toggle_ugc_playlist")
-
-            danmaku_text = "✅ B站弹幕下载：开启" if self.bilibili_danmaku_download else "❌ B站弹幕下载：关闭"
-            danmaku_button = InlineKeyboardButton(danmaku_text, callback_data="toggle_danmaku")
-
-            thumbnail_text = "✅ 油管封面下载：开启" if self.youtube_thumbnail_download else "❌ 油管封面下载：关闭"
-            thumbnail_button = InlineKeyboardButton(thumbnail_text, callback_data="toggle_thumbnail")
-
-            subtitle_text = "✅ 油管字幕下载：开启" if self.youtube_subtitle_download else "❌ 油管字幕下载：关闭"
-            subtitle_button = InlineKeyboardButton(subtitle_text, callback_data="toggle_subtitle")
-
-            timestamp_text = "✅ 油管时间戳命名：开启" if self.youtube_timestamp_naming else "❌ 油管时间戳命名：关闭"
-            timestamp_button = InlineKeyboardButton(timestamp_text, callback_data="toggle_timestamp")
-
-            bilibili_thumbnail_text = "✅ B站封面下载：开启" if self.bilibili_thumbnail_download else "❌ B站封面下载：关闭"
-            bilibili_thumbnail_button = InlineKeyboardButton(bilibili_thumbnail_text, callback_data="toggle_bilibili_thumbnail")
-
-            lyrics_merge_text = "✅ 网易云歌词合并：开启" if self.netease_lyrics_merge else "❌ 网易云歌词合并：关闭"
-            lyrics_merge_button = InlineKeyboardButton(lyrics_merge_text, callback_data="toggle_lyrics_merge")
-
-            # 网易云artist下载按钮
-            artist_download_text = "✅ 网易云artist下载：开启" if self.netease_artist_download else "❌ 网易云artist下载：关闭"
-            artist_download_button = InlineKeyboardButton(artist_download_text, callback_data="toggle_artist_download")
-
-            # 网易云cover下载按钮
-            cover_download_text = "✅ 网易云cover下载：开启" if self.netease_cover_download else "❌ 网易云cover下载：关闭"
-            cover_download_button = InlineKeyboardButton(cover_download_text, callback_data="toggle_cover_download")
-
-            reply_markup = InlineKeyboardMarkup([
-                [auto_playlist_button],
-                [id_tags_button],
-                [audio_mode_button],
-                [ugc_playlist_button],
-                [danmaku_button],
-                [thumbnail_button],
-                [subtitle_button],
-                [timestamp_button],
-                [bilibili_thumbnail_button],
-                [lyrics_merge_button],
-                [artist_download_button],
-                [cover_download_button]
-            ])
-            await query.edit_message_reply_markup(reply_markup=reply_markup)
-            await query.answer("已切换油管自动添加标签状态")
-
-        elif callback_data == "toggle_danmaku":
-            # 切换B站弹幕下载
-            current = self.bilibili_danmaku_download
-            self.bilibili_danmaku_download = not current
-            await self._save_config_async()
-
-            # 重新生成四个按钮
-            auto_playlist_text = "✅ B站多P自动下载：开启" if self.bilibili_auto_playlist else "❌ B站多P自动下载：关闭"
-            auto_playlist_button = InlineKeyboardButton(auto_playlist_text, callback_data="toggle_autop")
-
-            id_tags_text = "✅ 油管自动添加标签：开启" if self.youtube_id_tags else "❌ 油管自动添加标签：关闭"
-            id_tags_button = InlineKeyboardButton(id_tags_text, callback_data="toggle_id_tags")
-
-            audio_mode_text = "✅ 油管音频模式：开启" if self.youtube_audio_mode else "❌ 油管音频模式：关闭"
-            audio_mode_button = InlineKeyboardButton(audio_mode_text, callback_data="toggle_audio_mode")
-
-            ugc_playlist_text = "✅ B站UGC下载：开启" if self.bilibili_ugc_playlist else "❌ B站UGC下载：关闭"
-            ugc_playlist_button = InlineKeyboardButton(ugc_playlist_text, callback_data="toggle_ugc_playlist")
-
-            danmaku_text = "✅ B站弹幕下载：开启" if self.bilibili_danmaku_download else "❌ B站弹幕下载：关闭"
-            danmaku_button = InlineKeyboardButton(danmaku_text, callback_data="toggle_danmaku")
-
-            thumbnail_text = "✅ 油管封面下载：开启" if self.youtube_thumbnail_download else "❌ 油管封面下载：关闭"
-            thumbnail_button = InlineKeyboardButton(thumbnail_text, callback_data="toggle_thumbnail")
-
-            subtitle_text = "✅ 油管字幕下载：开启" if self.youtube_subtitle_download else "❌ 油管字幕下载：关闭"
-            subtitle_button = InlineKeyboardButton(subtitle_text, callback_data="toggle_subtitle")
-
-            timestamp_text = "✅ 油管时间戳命名：开启" if self.youtube_timestamp_naming else "❌ 油管时间戳命名：关闭"
-            timestamp_button = InlineKeyboardButton(timestamp_text, callback_data="toggle_timestamp")
-
-            bilibili_thumbnail_text = "✅ B站封面下载：开启" if self.bilibili_thumbnail_download else "❌ B站封面下载：关闭"
-            bilibili_thumbnail_button = InlineKeyboardButton(bilibili_thumbnail_text, callback_data="toggle_bilibili_thumbnail")
-
-            # 网易云歌词合并按钮
-            lyrics_merge_text = "✅ 网易云歌词合并：开启" if self.netease_lyrics_merge else "❌ 网易云歌词合并：关闭"
-            lyrics_merge_button = InlineKeyboardButton(lyrics_merge_text, callback_data="toggle_lyrics_merge")
-
-            # 网易云artist下载按钮
-            artist_download_text = "✅ 网易云artist下载：开启" if self.netease_artist_download else "❌ 网易云artist下载：关闭"
-            artist_download_button = InlineKeyboardButton(artist_download_text, callback_data="toggle_artist_download")
-
-            # 网易云cover下载按钮
-            cover_download_text = "✅ 网易云cover下载：开启" if self.netease_cover_download else "❌ 网易云cover下载：关闭"
-            cover_download_button = InlineKeyboardButton(cover_download_text, callback_data="toggle_cover_download")
-
-            reply_markup = InlineKeyboardMarkup([
-                [auto_playlist_button],
-                [id_tags_button],
-                [audio_mode_button],
-                [ugc_playlist_button],
-                [danmaku_button],
-                [thumbnail_button],
-                [subtitle_button],
-                [timestamp_button],
-                [bilibili_thumbnail_button],
-                [lyrics_merge_button],
-                [artist_download_button],
-                [cover_download_button]
-            ])
-            await query.edit_message_reply_markup(reply_markup=reply_markup)
-            await query.answer("已切换B站弹幕下载状态")
-
-        elif callback_data == "toggle_audio_mode":
-            # 切换YouTube音频模式
-            current = self.youtube_audio_mode
-            self.youtube_audio_mode = not current
-            await self._save_config_async()
-
-            # 重新生成四个按钮
-            auto_playlist_text = "✅ B站多P自动下载：开启" if self.bilibili_auto_playlist else "❌ B站多P自动下载：关闭"
-            auto_playlist_button = InlineKeyboardButton(auto_playlist_text, callback_data="toggle_autop")
-
-            id_tags_text = "✅ 油管自动添加标签：开启" if self.youtube_id_tags else "❌ 油管自动添加标签：关闭"
-            id_tags_button = InlineKeyboardButton(id_tags_text, callback_data="toggle_id_tags")
-
-            audio_mode_text = "✅ 油管音频模式：开启" if self.youtube_audio_mode else "❌ 油管音频模式：关闭"
-            audio_mode_button = InlineKeyboardButton(audio_mode_text, callback_data="toggle_audio_mode")
-
-            ugc_playlist_text = "✅ B站UGC下载：开启" if self.bilibili_ugc_playlist else "❌ B站UGC下载：关闭"
-            ugc_playlist_button = InlineKeyboardButton(ugc_playlist_text, callback_data="toggle_ugc_playlist")
-
-            danmaku_text = "✅ B站弹幕下载：开启" if self.bilibili_danmaku_download else "❌ B站弹幕下载：关闭"
-            danmaku_button = InlineKeyboardButton(danmaku_text, callback_data="toggle_danmaku")
-
-            thumbnail_text = "✅ 油管封面下载：开启" if self.youtube_thumbnail_download else "❌ 油管封面下载：关闭"
-            thumbnail_button = InlineKeyboardButton(thumbnail_text, callback_data="toggle_thumbnail")
-
-            subtitle_text = "✅ 油管字幕下载：开启" if self.youtube_subtitle_download else "❌ 油管字幕下载：关闭"
-            subtitle_button = InlineKeyboardButton(subtitle_text, callback_data="toggle_subtitle")
-
-            timestamp_text = "✅ 油管时间戳命名：开启" if self.youtube_timestamp_naming else "❌ 油管时间戳命名：关闭"
-            timestamp_button = InlineKeyboardButton(timestamp_text, callback_data="toggle_timestamp")
-
-            bilibili_thumbnail_text = "✅ B站封面下载：开启" if self.bilibili_thumbnail_download else "❌ B站封面下载：关闭"
-            bilibili_thumbnail_button = InlineKeyboardButton(bilibili_thumbnail_text, callback_data="toggle_bilibili_thumbnail")
-
-            # 网易云歌词合并按钮
-            lyrics_merge_text = "✅ 网易云歌词合并：开启" if self.netease_lyrics_merge else "❌ 网易云歌词合并：关闭"
-            lyrics_merge_button = InlineKeyboardButton(lyrics_merge_text, callback_data="toggle_lyrics_merge")
-
-            # 网易云artist下载按钮
-            artist_download_text = "✅ 网易云artist下载：开启" if self.netease_artist_download else "❌ 网易云artist下载：关闭"
-            artist_download_button = InlineKeyboardButton(artist_download_text, callback_data="toggle_artist_download")
-
-            # 网易云cover下载按钮
-            cover_download_text = "✅ 网易云cover下载：开启" if self.netease_cover_download else "❌ 网易云cover下载：关闭"
-            cover_download_button = InlineKeyboardButton(cover_download_text, callback_data="toggle_cover_download")
-
-            reply_markup = InlineKeyboardMarkup([
-                [auto_playlist_button],
-                [id_tags_button],
-                [audio_mode_button],
-                [ugc_playlist_button],
-                [danmaku_button],
-                [thumbnail_button],
-                [subtitle_button],
-                [timestamp_button],
-                [bilibili_thumbnail_button],
-                [lyrics_merge_button],
-                [artist_download_button],
-                [cover_download_button]
-            ])
-            await query.edit_message_reply_markup(reply_markup=reply_markup)
-            await query.answer("已切换油管音频模式状态")
-            await query.edit_message_reply_markup(reply_markup=reply_markup)
-            await query.answer("已切换网易云歌词合并状态")
-
-        elif callback_data == "toggle_ugc_playlist":
-            # 切换B站UGC播放列表自动下载
-            current = self.bilibili_ugc_playlist
-            self.bilibili_ugc_playlist = not current
-            await self._save_config_async()
-
-            # 重新生成五个按钮
-            auto_playlist_text = "✅ B站多P自动下载：开启" if self.bilibili_auto_playlist else "❌ B站多P自动下载：关闭"
-            auto_playlist_button = InlineKeyboardButton(auto_playlist_text, callback_data="toggle_autop")
-
-            id_tags_text = "✅ 油管自动添加标签：开启" if self.youtube_id_tags else "❌ 油管自动添加标签：关闭"
-            id_tags_button = InlineKeyboardButton(id_tags_text, callback_data="toggle_id_tags")
-
-            audio_mode_text = "✅ 油管音频模式：开启" if self.youtube_audio_mode else "❌ 油管音频模式：关闭"
-            audio_mode_button = InlineKeyboardButton(audio_mode_text, callback_data="toggle_audio_mode")
-
-            ugc_playlist_text = "✅ B站UGC下载：开启" if self.bilibili_ugc_playlist else "❌ B站UGC下载：关闭"
-            ugc_playlist_button = InlineKeyboardButton(ugc_playlist_text, callback_data="toggle_ugc_playlist")
-
-            danmaku_text = "✅ B站弹幕下载：开启" if self.bilibili_danmaku_download else "❌ B站弹幕下载：关闭"
-            danmaku_button = InlineKeyboardButton(danmaku_text, callback_data="toggle_danmaku")
-
-            thumbnail_text = "✅ 油管封面下载：开启" if self.youtube_thumbnail_download else "❌ 油管封面下载：关闭"
-            thumbnail_button = InlineKeyboardButton(thumbnail_text, callback_data="toggle_thumbnail")
-
-            subtitle_text = "✅ 油管字幕下载：开启" if self.youtube_subtitle_download else "❌ 油管字幕下载：关闭"
-            subtitle_button = InlineKeyboardButton(subtitle_text, callback_data="toggle_subtitle")
-
-            timestamp_text = "✅ 油管时间戳命名：开启" if self.youtube_timestamp_naming else "❌ 油管时间戳命名：关闭"
-            timestamp_button = InlineKeyboardButton(timestamp_text, callback_data="toggle_timestamp")
-
-            bilibili_thumbnail_text = "✅ B站封面下载：开启" if self.bilibili_thumbnail_download else "❌ B站封面下载：关闭"
-            bilibili_thumbnail_button = InlineKeyboardButton(bilibili_thumbnail_text, callback_data="toggle_bilibili_thumbnail")
-
-            reply_markup = InlineKeyboardMarkup([
-                [auto_playlist_button],
-                [id_tags_button],
-                [audio_mode_button],
-                [ugc_playlist_button],
-                [danmaku_button],
-                [thumbnail_button],
-                [subtitle_button],
-                [timestamp_button],
-                [bilibili_thumbnail_button]
-            ])
-            await query.edit_message_reply_markup(reply_markup=reply_markup)
-            await query.answer("已切换B站UGC下载状态")
-
-            lyrics_merge_text = "✅ 网易云歌词合并：开启" if self.netease_lyrics_merge else "❌ 网易云歌词合并：关闭"
-            lyrics_merge_button = InlineKeyboardButton(lyrics_merge_text, callback_data="toggle_lyrics_merge")
-
-            reply_markup = InlineKeyboardMarkup([
-                [auto_playlist_button],
-                [id_tags_button],
-                [audio_mode_button],
-                [ugc_playlist_button],
-                [danmaku_button],
-                [thumbnail_button],
-                [subtitle_button],
-                [timestamp_button],
-                [bilibili_thumbnail_button],
-                [lyrics_merge_button]
-            ])
-            # 网易云artist下载按钮
-            artist_download_text = "✅ 网易云artist下载：开启" if self.netease_artist_download else "❌ 网易云artist下载：关闭"
-            artist_download_button = InlineKeyboardButton(artist_download_text, callback_data="toggle_artist_download")
-
-            # 网易云cover下载按钮
-            cover_download_text = "✅ 网易云cover下载：开启" if self.netease_cover_download else "❌ 网易云cover下载：关闭"
-            cover_download_button = InlineKeyboardButton(cover_download_text, callback_data="toggle_cover_download")
-
-            reply_markup = InlineKeyboardMarkup([
-                [auto_playlist_button],
-                [id_tags_button],
-                [audio_mode_button],
-                [ugc_playlist_button],
-                [danmaku_button],
-                [thumbnail_button],
-                [subtitle_button],
-                [timestamp_button],
-                [bilibili_thumbnail_button],
-                [lyrics_merge_button],
-                [artist_download_button],
-                [cover_download_button]
-            ])
-            await query.edit_message_reply_markup(reply_markup=reply_markup)
-            await query.answer("已切换网易云歌词合并状态")
-
-        elif callback_data == "toggle_thumbnail":
-            # 切换YouTube封面下载
-            current = self.youtube_thumbnail_download
-            self.youtube_thumbnail_download = not current
-            await self._save_config_async()
-
-            # 重新生成所有按钮
-            auto_playlist_text = "✅ B站多P自动下载：开启" if self.bilibili_auto_playlist else "❌ B站多P自动下载：关闭"
-            auto_playlist_button = InlineKeyboardButton(auto_playlist_text, callback_data="toggle_autop")
-
-            id_tags_text = "✅ 油管自动添加标签：开启" if self.youtube_id_tags else "❌ 油管自动添加标签：关闭"
-            id_tags_button = InlineKeyboardButton(id_tags_text, callback_data="toggle_id_tags")
-
-            audio_mode_text = "✅ 油管音频模式：开启" if self.youtube_audio_mode else "❌ 油管音频模式：关闭"
-            audio_mode_button = InlineKeyboardButton(audio_mode_text, callback_data="toggle_audio_mode")
-
-            ugc_playlist_text = "✅ B站UGC下载：开启" if self.bilibili_ugc_playlist else "❌ B站UGC下载：关闭"
-            ugc_playlist_button = InlineKeyboardButton(ugc_playlist_text, callback_data="toggle_ugc_playlist")
-
-            danmaku_text = "✅ B站弹幕下载：开启" if self.bilibili_danmaku_download else "❌ B站弹幕下载：关闭"
-            danmaku_button = InlineKeyboardButton(danmaku_text, callback_data="toggle_danmaku")
-
-            thumbnail_text = "✅ 油管封面下载：开启" if self.youtube_thumbnail_download else "❌ 油管封面下载：关闭"
-            thumbnail_button = InlineKeyboardButton(thumbnail_text, callback_data="toggle_thumbnail")
-
-            reply_markup = InlineKeyboardMarkup([
-                [auto_playlist_button],
-                [id_tags_button],
-                [audio_mode_button],
-                [ugc_playlist_button],
-                [danmaku_button],
-                [thumbnail_button]
-            ])
-            await query.edit_message_reply_markup(reply_markup=reply_markup)
-            await query.answer("已切换油管封面下载状态")
-
-        elif callback_data == "toggle_subtitle":
-            # 切换YouTube字幕下载
-            current = self.youtube_subtitle_download
-            self.youtube_subtitle_download = not current
-            await self._save_config_async()
-
-            # 重新生成所有按钮
-            auto_playlist_text = "✅ B站多P自动下载：开启" if self.bilibili_auto_playlist else "❌ B站多P自动下载：关闭"
-            auto_playlist_button = InlineKeyboardButton(auto_playlist_text, callback_data="toggle_autop")
-
-            id_tags_text = "✅ 油管自动添加标签：开启" if self.youtube_id_tags else "❌ 油管自动添加标签：关闭"
-            id_tags_button = InlineKeyboardButton(id_tags_text, callback_data="toggle_id_tags")
-
-            audio_mode_text = "✅ 油管音频模式：开启" if self.youtube_audio_mode else "❌ 油管音频模式：关闭"
-            audio_mode_button = InlineKeyboardButton(audio_mode_text, callback_data="toggle_audio_mode")
-
-            ugc_playlist_text = "✅ B站UGC下载：开启" if self.bilibili_ugc_playlist else "❌ B站UGC下载：关闭"
-            ugc_playlist_button = InlineKeyboardButton(ugc_playlist_text, callback_data="toggle_ugc_playlist")
-
-            danmaku_text = "✅ B站弹幕下载：开启" if self.bilibili_danmaku_download else "❌ B站弹幕下载：关闭"
-            danmaku_button = InlineKeyboardButton(danmaku_text, callback_data="toggle_danmaku")
-
-            thumbnail_text = "✅ 油管封面下载：开启" if self.youtube_thumbnail_download else "❌ 油管封面下载：关闭"
-            thumbnail_button = InlineKeyboardButton(thumbnail_text, callback_data="toggle_thumbnail")
-
-            subtitle_text = "✅ 油管字幕下载：开启" if self.youtube_subtitle_download else "❌ 油管字幕下载：关闭"
-            subtitle_button = InlineKeyboardButton(subtitle_text, callback_data="toggle_subtitle")
-
-            timestamp_text = "✅ 油管时间戳命名：开启" if self.youtube_timestamp_naming else "❌ 油管时间戳命名：关闭"
-            timestamp_button = InlineKeyboardButton(timestamp_text, callback_data="toggle_timestamp")
-
-            bilibili_thumbnail_text = "✅ B站封面下载：开启" if self.bilibili_thumbnail_download else "❌ B站封面下载：关闭"
-            bilibili_thumbnail_button = InlineKeyboardButton(bilibili_thumbnail_text, callback_data="toggle_bilibili_thumbnail")
-
-            reply_markup = InlineKeyboardMarkup([
-                [auto_playlist_button],
-                [id_tags_button],
-                [audio_mode_button],
-                [ugc_playlist_button],
-                [danmaku_button],
-                [thumbnail_button],
-                [subtitle_button],
-                [timestamp_button],
-                [bilibili_thumbnail_button]
-            ])
-            await query.edit_message_reply_markup(reply_markup=reply_markup)
-            await query.answer("已切换油管字幕下载状态")
-
-            lyrics_merge_text = "✅ 网易云歌词合并：开启" if self.netease_lyrics_merge else "❌ 网易云歌词合并：关闭"
-            lyrics_merge_button = InlineKeyboardButton(lyrics_merge_text, callback_data="toggle_lyrics_merge")
-
-            reply_markup = InlineKeyboardMarkup([
-                [auto_playlist_button],
-                [id_tags_button],
-                [audio_mode_button],
-                [ugc_playlist_button],
-                [danmaku_button],
-                [thumbnail_button],
-                [subtitle_button],
-                [timestamp_button],
-                [bilibili_thumbnail_button],
-                [lyrics_merge_button]
-            ])
-            # 网易云artist下载按钮
-            artist_download_text = "✅ 网易云artist下载：开启" if self.netease_artist_download else "❌ 网易云artist下载：关闭"
-            artist_download_button = InlineKeyboardButton(artist_download_text, callback_data="toggle_artist_download")
-
-            # 网易云cover下载按钮
-            cover_download_text = "✅ 网易云cover下载：开启" if self.netease_cover_download else "❌ 网易云cover下载：关闭"
-            cover_download_button = InlineKeyboardButton(cover_download_text, callback_data="toggle_cover_download")
-
-            reply_markup = InlineKeyboardMarkup([
-                [auto_playlist_button],
-                [id_tags_button],
-                [audio_mode_button],
-                [ugc_playlist_button],
-                [danmaku_button],
-                [thumbnail_button],
-                [subtitle_button],
-                [timestamp_button],
-                [bilibili_thumbnail_button],
-                [lyrics_merge_button],
-                [artist_download_button],
-                [cover_download_button]
-            ])
-            await query.edit_message_reply_markup(reply_markup=reply_markup)
-            await query.answer("已切换网易云歌词合并状态")
-
-        elif callback_data == "toggle_timestamp":
-            # 切换YouTube时间戳命名
-            current = self.youtube_timestamp_naming
-            self.youtube_timestamp_naming = not current
-            await self._save_config_async()
-
-            # 重新生成所有按钮
-            auto_playlist_text = "✅ B站多P自动下载：开启" if self.bilibili_auto_playlist else "❌ B站多P自动下载：关闭"
-            auto_playlist_button = InlineKeyboardButton(auto_playlist_text, callback_data="toggle_autop")
-
-            id_tags_text = "✅ 油管自动添加标签：开启" if self.youtube_id_tags else "❌ 油管自动添加标签：关闭"
-            id_tags_button = InlineKeyboardButton(id_tags_text, callback_data="toggle_id_tags")
-
-            audio_mode_text = "✅ 油管音频模式：开启" if self.youtube_audio_mode else "❌ 油管音频模式：关闭"
-            audio_mode_button = InlineKeyboardButton(audio_mode_text, callback_data="toggle_audio_mode")
-
-            ugc_playlist_text = "✅ B站UGC下载：开启" if self.bilibili_ugc_playlist else "❌ B站UGC下载：关闭"
-            ugc_playlist_button = InlineKeyboardButton(ugc_playlist_text, callback_data="toggle_ugc_playlist")
-
-            danmaku_text = "✅ B站弹幕下载：开启" if self.bilibili_danmaku_download else "❌ B站弹幕下载：关闭"
-            danmaku_button = InlineKeyboardButton(danmaku_text, callback_data="toggle_danmaku")
-
-            thumbnail_text = "✅ 油管封面下载：开启" if self.youtube_thumbnail_download else "❌ 油管封面下载：关闭"
-            thumbnail_button = InlineKeyboardButton(thumbnail_text, callback_data="toggle_thumbnail")
-
-            subtitle_text = "✅ 油管字幕下载：开启" if self.youtube_subtitle_download else "❌ 油管字幕下载：关闭"
-            subtitle_button = InlineKeyboardButton(subtitle_text, callback_data="toggle_subtitle")
-
-            timestamp_text = "✅ 油管时间戳命名：开启" if self.youtube_timestamp_naming else "❌ 油管时间戳命名：关闭"
-            timestamp_button = InlineKeyboardButton(timestamp_text, callback_data="toggle_timestamp")
-
-            bilibili_thumbnail_text = "✅ B站封面下载：开启" if self.bilibili_thumbnail_download else "❌ B站封面下载：关闭"
-            bilibili_thumbnail_button = InlineKeyboardButton(bilibili_thumbnail_text, callback_data="toggle_bilibili_thumbnail")
-
-            reply_markup = InlineKeyboardMarkup([
-                [auto_playlist_button],
-                [id_tags_button],
-                [audio_mode_button],
-                [ugc_playlist_button],
-                [danmaku_button],
-                [thumbnail_button],
-                [subtitle_button],
-                [timestamp_button],
-                [bilibili_thumbnail_button]
-            ])
-            await query.edit_message_reply_markup(reply_markup=reply_markup)
-            await query.answer("已切换油管时间戳命名状态")
-
-            lyrics_merge_text = "✅ 网易云歌词合并：开启" if self.netease_lyrics_merge else "❌ 网易云歌词合并：关闭"
-            lyrics_merge_button = InlineKeyboardButton(lyrics_merge_text, callback_data="toggle_lyrics_merge")
-
-            reply_markup = InlineKeyboardMarkup([
-                [auto_playlist_button],
-                [id_tags_button],
-                [audio_mode_button],
-                [ugc_playlist_button],
-                [danmaku_button],
-                [thumbnail_button],
-                [subtitle_button],
-                [timestamp_button],
-                [bilibili_thumbnail_button],
-                [lyrics_merge_button]
-            ])
-            # 网易云artist下载按钮
-            artist_download_text = "✅ 网易云artist下载：开启" if self.netease_artist_download else "❌ 网易云artist下载：关闭"
-            artist_download_button = InlineKeyboardButton(artist_download_text, callback_data="toggle_artist_download")
-
-            # 网易云cover下载按钮
-            cover_download_text = "✅ 网易云cover下载：开启" if self.netease_cover_download else "❌ 网易云cover下载：关闭"
-            cover_download_button = InlineKeyboardButton(cover_download_text, callback_data="toggle_cover_download")
-
-            reply_markup = InlineKeyboardMarkup([
-                [auto_playlist_button],
-                [id_tags_button],
-                [audio_mode_button],
-                [ugc_playlist_button],
-                [danmaku_button],
-                [thumbnail_button],
-                [subtitle_button],
-                [timestamp_button],
-                [bilibili_thumbnail_button],
-                [lyrics_merge_button],
-                [artist_download_button],
-                [cover_download_button]
-            ])
-            await query.edit_message_reply_markup(reply_markup=reply_markup)
-            await query.answer("已切换网易云歌词合并状态")
-
-        elif callback_data == "toggle_bilibili_thumbnail":
-            # 切换B站封面下载
-            current = self.bilibili_thumbnail_download
-            self.bilibili_thumbnail_download = not current
-            await self._save_config_async()
-
-            # 重新生成所有按钮
-            auto_playlist_text = "✅ B站多P自动下载：开启" if self.bilibili_auto_playlist else "❌ B站多P自动下载：关闭"
-            auto_playlist_button = InlineKeyboardButton(auto_playlist_text, callback_data="toggle_autop")
-
-            id_tags_text = "✅ 油管自动添加标签：开启" if self.youtube_id_tags else "❌ 油管自动添加标签：关闭"
-            id_tags_button = InlineKeyboardButton(id_tags_text, callback_data="toggle_id_tags")
-
-            audio_mode_text = "✅ 油管音频模式：开启" if self.youtube_audio_mode else "❌ 油管音频模式：关闭"
-            audio_mode_button = InlineKeyboardButton(audio_mode_text, callback_data="toggle_audio_mode")
-
-            ugc_playlist_text = "✅ B站UGC下载：开启" if self.bilibili_ugc_playlist else "❌ B站UGC下载：关闭"
-            ugc_playlist_button = InlineKeyboardButton(ugc_playlist_text, callback_data="toggle_ugc_playlist")
-
-            danmaku_text = "✅ B站弹幕下载：开启" if self.bilibili_danmaku_download else "❌ B站弹幕下载：关闭"
-            danmaku_button = InlineKeyboardButton(danmaku_text, callback_data="toggle_danmaku")
-
-            thumbnail_text = "✅ 油管封面下载：开启" if self.youtube_thumbnail_download else "❌ 油管封面下载：关闭"
-            thumbnail_button = InlineKeyboardButton(thumbnail_text, callback_data="toggle_thumbnail")
-
-            subtitle_text = "✅ 油管字幕下载：开启" if self.youtube_subtitle_download else "❌ 油管字幕下载：关闭"
-            subtitle_button = InlineKeyboardButton(subtitle_text, callback_data="toggle_subtitle")
-
-            timestamp_text = "✅ 油管时间戳命名：开启" if self.youtube_timestamp_naming else "❌ 油管时间戳命名：关闭"
-            timestamp_button = InlineKeyboardButton(timestamp_text, callback_data="toggle_timestamp")
-
-            bilibili_thumbnail_text = "✅ B站封面下载：开启" if self.bilibili_thumbnail_download else "❌ B站封面下载：关闭"
-            bilibili_thumbnail_button = InlineKeyboardButton(bilibili_thumbnail_text, callback_data="toggle_bilibili_thumbnail")
-
-            # 网易云歌词合并按钮
-            lyrics_merge_text = "✅ 网易云歌词合并：开启" if self.netease_lyrics_merge else "❌ 网易云歌词合并：关闭"
-            lyrics_merge_button = InlineKeyboardButton(lyrics_merge_text, callback_data="toggle_lyrics_merge")
-
-            # 网易云artist下载按钮
-            artist_download_text = "✅ 网易云artist下载：开启" if self.netease_artist_download else "❌ 网易云artist下载：关闭"
-            artist_download_button = InlineKeyboardButton(artist_download_text, callback_data="toggle_artist_download")
-
-            # 网易云cover下载按钮
-            cover_download_text = "✅ 网易云cover下载：开启" if self.netease_cover_download else "❌ 网易云cover下载：关闭"
-            cover_download_button = InlineKeyboardButton(cover_download_text, callback_data="toggle_cover_download")
-
-            reply_markup = InlineKeyboardMarkup([
-                [auto_playlist_button],
-                [id_tags_button],
-                [audio_mode_button],
-                [ugc_playlist_button],
-                [danmaku_button],
-                [thumbnail_button],
-                [subtitle_button],
-                [timestamp_button],
-                [bilibili_thumbnail_button],
-                [lyrics_merge_button],
-                [artist_download_button],
-                [cover_download_button]
-            ])
-            await query.edit_message_reply_markup(reply_markup=reply_markup)
-            await query.answer("已切换B站封面下载状态")
-
-        elif callback_data == "toggle_lyrics_merge":
-            # 切换网易云歌词合并
-            current = self.netease_lyrics_merge
-            self.netease_lyrics_merge = not current
-            await self._save_config_async()
-
-            # 重新生成所有按钮
-            auto_playlist_text = "✅ B站多P自动下载：开启" if self.bilibili_auto_playlist else "❌ B站多P自动下载：关闭"
-            auto_playlist_button = InlineKeyboardButton(auto_playlist_text, callback_data="toggle_autop")
-
-            id_tags_text = "✅ 油管自动添加标签：开启" if self.youtube_id_tags else "❌ 油管自动添加标签：关闭"
-            id_tags_button = InlineKeyboardButton(id_tags_text, callback_data="toggle_id_tags")
-
-            audio_mode_text = "✅ 油管音频模式：开启" if self.youtube_audio_mode else "❌ 油管音频模式：关闭"
-            audio_mode_button = InlineKeyboardButton(audio_mode_text, callback_data="toggle_audio_mode")
-
-            ugc_playlist_text = "✅ B站UGC下载：开启" if self.bilibili_ugc_playlist else "❌ B站UGC下载：关闭"
-            ugc_playlist_button = InlineKeyboardButton(ugc_playlist_text, callback_data="toggle_ugc_playlist")
-
-            danmaku_text = "✅ B站弹幕下载：开启" if self.bilibili_danmaku_download else "❌ B站弹幕下载：关闭"
-            danmaku_button = InlineKeyboardButton(danmaku_text, callback_data="toggle_danmaku")
-
-            thumbnail_text = "✅ 油管封面下载：开启" if self.youtube_thumbnail_download else "❌ 油管封面下载：关闭"
-            thumbnail_button = InlineKeyboardButton(thumbnail_text, callback_data="toggle_thumbnail")
-
-            subtitle_text = "✅ 油管字幕下载：开启" if self.youtube_subtitle_download else "❌ 油管字幕下载：关闭"
-            subtitle_button = InlineKeyboardButton(subtitle_text, callback_data="toggle_subtitle")
-
-            timestamp_text = "✅ 油管时间戳命名：开启" if self.youtube_timestamp_naming else "❌ 油管时间戳命名：关闭"
-            timestamp_button = InlineKeyboardButton(timestamp_text, callback_data="toggle_timestamp")
-
-            bilibili_thumbnail_text = "✅ B站封面下载：开启" if self.bilibili_thumbnail_download else "❌ B站封面下载：关闭"
-            bilibili_thumbnail_button = InlineKeyboardButton(bilibili_thumbnail_text, callback_data="toggle_bilibili_thumbnail")
-
-            lyrics_merge_text = "✅ 网易云歌词合并：开启" if self.netease_lyrics_merge else "❌ 网易云歌词合并：关闭"
-            lyrics_merge_button = InlineKeyboardButton(lyrics_merge_text, callback_data="toggle_lyrics_merge")
-
-            # 网易云artist下载按钮
-            artist_download_text = "✅ 网易云artist下载：开启" if self.netease_artist_download else "❌ 网易云artist下载：关闭"
-            artist_download_button = InlineKeyboardButton(artist_download_text, callback_data="toggle_artist_download")
-
-            # 网易云cover下载按钮
-            cover_download_text = "✅ 网易云cover下载：开启" if self.netease_cover_download else "❌ 网易云cover下载：关闭"
-            cover_download_button = InlineKeyboardButton(cover_download_text, callback_data="toggle_cover_download")
-
-            reply_markup = InlineKeyboardMarkup([
-                [auto_playlist_button],
-                [id_tags_button],
-                [audio_mode_button],
-                [ugc_playlist_button],
-                [danmaku_button],
-                [thumbnail_button],
-                [subtitle_button],
-                [timestamp_button],
-                [bilibili_thumbnail_button],
-                [lyrics_merge_button],
-                [artist_download_button],
-                [cover_download_button]
-            ])
-            await query.edit_message_reply_markup(reply_markup=reply_markup)
-            await query.answer("已切换网易云歌词合并状态")
-
-        elif callback_data == "toggle_artist_download":
-            # 切换网易云artist下载
-            current = self.netease_artist_download
-            self.netease_artist_download = not current
-            await self._save_config_async()
-
-            # 重新生成所有按钮
-            auto_playlist_text = "✅ B站多P自动下载：开启" if self.bilibili_auto_playlist else "❌ B站多P自动下载：关闭"
-            auto_playlist_button = InlineKeyboardButton(auto_playlist_text, callback_data="toggle_autop")
-
-            id_tags_text = "✅ 油管自动添加标签：开启" if self.youtube_id_tags else "❌ 油管自动添加标签：关闭"
-            id_tags_button = InlineKeyboardButton(id_tags_text, callback_data="toggle_id_tags")
-
-            audio_mode_text = "✅ 油管音频模式：开启" if self.youtube_audio_mode else "❌ 油管音频模式：关闭"
-            audio_mode_button = InlineKeyboardButton(audio_mode_text, callback_data="toggle_audio_mode")
-
-            ugc_playlist_text = "✅ B站UGC下载：开启" if self.bilibili_ugc_playlist else "❌ B站UGC下载：关闭"
-            ugc_playlist_button = InlineKeyboardButton(ugc_playlist_text, callback_data="toggle_ugc_playlist")
-
-            danmaku_text = "✅ B站弹幕下载：开启" if self.bilibili_danmaku_download else "❌ B站弹幕下载：关闭"
-            danmaku_button = InlineKeyboardButton(danmaku_text, callback_data="toggle_danmaku")
-
-            thumbnail_text = "✅ 油管封面下载：开启" if self.youtube_thumbnail_download else "❌ 油管封面下载：关闭"
-            thumbnail_button = InlineKeyboardButton(thumbnail_text, callback_data="toggle_thumbnail")
-
-            subtitle_text = "✅ 油管字幕下载：开启" if self.youtube_subtitle_download else "❌ 油管字幕下载：关闭"
-            subtitle_button = InlineKeyboardButton(subtitle_text, callback_data="toggle_subtitle")
-
-            timestamp_text = "✅ 油管时间戳命名：开启" if self.youtube_timestamp_naming else "❌ 油管时间戳命名：关闭"
-            timestamp_button = InlineKeyboardButton(timestamp_text, callback_data="toggle_timestamp")
-
-            bilibili_thumbnail_text = "✅ B站封面下载：开启" if self.bilibili_thumbnail_download else "❌ B站封面下载：关闭"
-            bilibili_thumbnail_button = InlineKeyboardButton(bilibili_thumbnail_text, callback_data="toggle_bilibili_thumbnail")
-
-            lyrics_merge_text = "✅ 网易云歌词合并：开启" if self.netease_lyrics_merge else "❌ 网易云歌词合并：关闭"
-            lyrics_merge_button = InlineKeyboardButton(lyrics_merge_text, callback_data="toggle_lyrics_merge")
-
-            # 网易云artist下载按钮
-            artist_download_text = "✅ 网易云artist下载：开启" if self.netease_artist_download else "❌ 网易云artist下载：关闭"
-            artist_download_button = InlineKeyboardButton(artist_download_text, callback_data="toggle_artist_download")
-
-            # 网易云cover下载按钮
-            cover_download_text = "✅ 网易云cover下载：开启" if self.netease_cover_download else "❌ 网易云cover下载：关闭"
-            cover_download_button = InlineKeyboardButton(cover_download_text, callback_data="toggle_cover_download")
-
-            reply_markup = InlineKeyboardMarkup([
-                [auto_playlist_button],
-                [id_tags_button],
-                [audio_mode_button],
-                [ugc_playlist_button],
-                [danmaku_button],
-                [thumbnail_button],
-                [subtitle_button],
-                [timestamp_button],
-                [bilibili_thumbnail_button],
-                [lyrics_merge_button],
-                [artist_download_button],
-                [cover_download_button]
-            ])
-            await query.edit_message_reply_markup(reply_markup=reply_markup)
-            await query.answer("已切换网易云artist下载状态")
-
-        elif callback_data == "toggle_cover_download":
-            # 切换网易云cover下载
-            current = self.netease_cover_download
-            self.netease_cover_download = not current
-            await self._save_config_async()
-
-            # 重新生成所有按钮
-            auto_playlist_text = "✅ B站多P自动下载：开启" if self.bilibili_auto_playlist else "❌ B站多P自动下载：关闭"
-            auto_playlist_button = InlineKeyboardButton(auto_playlist_text, callback_data="toggle_autop")
-
-            id_tags_text = "✅ 油管自动添加标签：开启" if self.youtube_id_tags else "❌ 油管自动添加标签：关闭"
-            id_tags_button = InlineKeyboardButton(id_tags_text, callback_data="toggle_id_tags")
-
-            audio_mode_text = "✅ 油管音频模式：开启" if self.youtube_audio_mode else "❌ 油管音频模式：关闭"
-            audio_mode_button = InlineKeyboardButton(audio_mode_text, callback_data="toggle_audio_mode")
-
-            ugc_playlist_text = "✅ B站UGC下载：开启" if self.bilibili_ugc_playlist else "❌ B站UGC下载：关闭"
-            ugc_playlist_button = InlineKeyboardButton(ugc_playlist_text, callback_data="toggle_ugc_playlist")
-
-            danmaku_text = "✅ B站弹幕下载：开启" if self.bilibili_danmaku_download else "❌ B站弹幕下载：关闭"
-            danmaku_button = InlineKeyboardButton(danmaku_text, callback_data="toggle_danmaku")
-
-            thumbnail_text = "✅ 油管封面下载：开启" if self.youtube_thumbnail_download else "❌ 油管封面下载：关闭"
-            thumbnail_button = InlineKeyboardButton(thumbnail_text, callback_data="toggle_thumbnail")
-
-            subtitle_text = "✅ 油管字幕下载：开启" if self.youtube_subtitle_download else "❌ 油管字幕下载：关闭"
-            subtitle_button = InlineKeyboardButton(subtitle_text, callback_data="toggle_subtitle")
-
-            timestamp_text = "✅ 油管时间戳命名：开启" if self.youtube_timestamp_naming else "❌ 油管时间戳命名：关闭"
-            timestamp_button = InlineKeyboardButton(timestamp_text, callback_data="toggle_timestamp")
-
-            bilibili_thumbnail_text = "✅ B站封面下载：开启" if self.bilibili_thumbnail_download else "❌ B站封面下载：关闭"
-            bilibili_thumbnail_button = InlineKeyboardButton(bilibili_thumbnail_text, callback_data="toggle_bilibili_thumbnail")
-
-            lyrics_merge_text = "✅ 网易云歌词合并：开启" if self.netease_lyrics_merge else "❌ 网易云歌词合并：关闭"
-            lyrics_merge_button = InlineKeyboardButton(lyrics_merge_text, callback_data="toggle_lyrics_merge")
-
-            # 网易云artist下载按钮
-            artist_download_text = "✅ 网易云artist下载：开启" if self.netease_artist_download else "❌ 网易云artist下载：关闭"
-            artist_download_button = InlineKeyboardButton(artist_download_text, callback_data="toggle_artist_download")
-
-            # 网易云cover下载按钮
-            cover_download_text = "✅ 网易云cover下载：开启" if self.netease_cover_download else "❌ 网易云cover下载：关闭"
-            cover_download_button = InlineKeyboardButton(cover_download_text, callback_data="toggle_cover_download")
-
-            reply_markup = InlineKeyboardMarkup([
-                [auto_playlist_button],
-                [id_tags_button],
-                [audio_mode_button],
-                [ugc_playlist_button],
-                [danmaku_button],
-                [thumbnail_button],
-                [subtitle_button],
-                [timestamp_button],
-                [bilibili_thumbnail_button],
-                [lyrics_merge_button],
-                [artist_download_button],
-                [cover_download_button]
-            ])
-            await query.edit_message_reply_markup(reply_markup=reply_markup)
-            await query.answer("已切换网易云cover下载状态")
 
     async def cancel_task_callback(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE

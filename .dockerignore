@@ -1,0 +1,53 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv
+ENV
+env
+*.egg-info
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Documentation
+doc
+*.md
+!README.md
+
+# Test
+test
+tests
+
+# Backup files
+*.backup
+*.patch
+
+# Local config
+cookies/*.txt
+config/*.local.toml
+
+# Assets (如果需要可以在运行时挂载)
+# assets/
+
+# Scripts (本地开发用)
+scripts/
+
+# Web (如果需要可以在运行时挂载)
+# web/

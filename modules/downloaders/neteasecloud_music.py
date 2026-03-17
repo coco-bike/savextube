@@ -19,12 +19,20 @@ logger = logging.getLogger('netease_downloader')
 
 # 导入音乐元数据处理模块
 try:
-    from music_metadata import MusicMetadataManager
+    from .music_metadata import MusicMetadataManager
     METADATA_AVAILABLE = True
-    logger.info("✅ 成功导入音乐元数据模块")
-except ImportError as e:
-    METADATA_AVAILABLE = False
-    logger.warning(f"⚠️ 音乐元数据模块不可用，将跳过元数据处理: {e}")
+    logger.info("✅ 成功导入音乐元数据模块（包内导入）")
+except ImportError:
+    try:
+        from music_metadata import MusicMetadataManager
+        METADATA_AVAILABLE = True
+        logger.info("✅ 成功导入音乐元数据模块（兼容导入）")
+    except ImportError as e:
+        METADATA_AVAILABLE = False
+        logger.warning(f"⚠️ 音乐元数据模块不可用，将跳过元数据处理: {e}")
+    except Exception as e:
+        METADATA_AVAILABLE = False
+        logger.error(f"❌ 导入音乐元数据模块时出错: {e}")
 except Exception as e:
     METADATA_AVAILABLE = False
     logger.error(f"❌ 导入音乐元数据模块时出错: {e}")
@@ -4320,5 +4328,6 @@ class NeteaseDownloader:
         except Exception as e:
             logger.error(f"❌ 备用方法异常: {e}")
             return None
+
 
 

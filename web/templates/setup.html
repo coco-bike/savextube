@@ -175,17 +175,8 @@
           <div class="menu-item" @click="goTo('/dashboard')">
             <span>📊</span> 仪表盘
           </div>
-          <div class="menu-item" @click="goTo('/playlists')">
-            <span>📀</span> 歌单管理
-          </div>
-          <div class="menu-item" @click="goTo('/search')">
-            <span>🔍</span> TG 频道搜索
-          </div>
           <div class="menu-item" @click="goTo('/tasks')">
             <span>📥</span> 下载任务
-          </div>
-          <div class="menu-item" @click="goTo('/settings')">
-            <span>⚙️</span> 系统设置
           </div>
           <div class="menu-item active" @click="goTo('/setup')">
             <span>🔧</span> Setup
@@ -268,7 +259,10 @@
               <ol style="margin-left: 20px; margin-top: 10px; line-height: 2">
                 <li>
                   访问
-                  <a href="https://my.telegram.org" target="_blank"
+                  <a
+                    href="https://my.telegram.org"
+                    target="_blank"
+                    rel="noopener noreferrer"
                     >https://my.telegram.org</a
                   >
                 </li>
@@ -303,13 +297,19 @@
                   placeholder="例如：1eadd0ce914f1deb3bf5..."
                 ></el-input>
               </el-form-item>
+              <el-form-item label="手机号">
+                <el-input
+                  v-model="apiCredentials.phoneNumber"
+                  placeholder="例如：+8613812345678"
+                ></el-input>
+              </el-form-item>
             </el-form>
             <div class="action-area">
               <el-button @click="currentStep = 1">← 上一步</el-button>
               <el-button
                 type="primary"
                 @click="saveCredentials"
-                :disabled="!apiCredentials.apiId || !apiCredentials.apiHash"
+                :disabled="!apiCredentials.apiId || !apiCredentials.apiHash || !apiCredentials.phoneNumber"
               >
                 保存并下一步 →
               </el-button>
@@ -334,19 +334,32 @@
               会话字符串是一个加密的凭证，用于验证你的 Telegram
               账号。生成后会自动保存到配置文件中。
             </div>
+            <el-form label-width="120px" style="margin-top: 20px">
+              <el-form-item label="验证码">
+                <el-input
+                  v-model="verificationCode"
+                  placeholder="请输入 Telegram 发来的验证码"
+                ></el-input>
+              </el-form-item>
+            </el-form>
             <div class="action-area">
               <el-button @click="currentStep = 2">← 上一步</el-button>
+              <el-button @click="sendCode" :loading="sendingCode">
+                {{ sendingCode ? '发送中...' : '获取验证码' }}
+              </el-button>
               <el-button
                 type="primary"
                 @click="generateSession"
                 :loading="generating"
+                :disabled="!verificationCode || !phoneCodeHash"
               >
                 {{ generating ? '正在生成...' : '生成会话' }}
               </el-button>
             </div>
+            <div class="info-box" v-if="statusMessage">[[ statusMessage ]]</div>
             <div class="success-box" v-if="sessionString">
               ✅ <strong>会话生成成功！</strong><br />
-              <div class="code-block">{{ sessionString }}</div>
+              <div class="code-block">[[ sessionString ]]</div>
               <p style="margin-top: 10px; font-size: 13px; color: #666">
                 💾 会话已自动保存到配置文件，无需手动复制。
               </p>
@@ -382,7 +395,7 @@
             </div>
             <div class="warning-box" v-if="connectionTest === 'failed'">
               ❌ <strong>连接测试失败</strong><br />
-              {{ connectionError }}<br /><br />
+              [[ connectionError ]]<br /><br />
               可能的原因：
               <ul style="margin-left: 20px; margin-top: 10px">
                 <li>网络问题，请检查代理设置</li>
@@ -403,8 +416,7 @@
               现在你可以：
               <ul style="margin-left: 20px; margin-top: 10px; line-height: 2">
                 <li>在 Telegram 中发送媒体文件给机器人进行下载</li>
-                <li>在歌单管理页面添加歌单并下载</li>
-                <li>在 TG 频道搜索页面搜索高品质音乐</li>
+                <li>在下载任务页面查看任务状态</li>
               </ul>
             </div>
             <div class="action-area">
@@ -431,29 +443,64 @@
           const apiCredentials = reactive({
             apiId: "",
             apiHash: "",
+            phoneNumber: "",
           });
+          const verificationCode = ref("");
           const sessionString = ref("");
+          const phoneCodeHash = ref("");
+          const tempSessionString = ref("");
+          const sendingCode = ref(false);
           const generating = ref(false);
           const testing = ref(false);
           const connectionTest = ref("");
           const connectionError = ref("");
+          const statusMessage = ref("");
+
+          const authenticatedFetch = async (url, options = {}) => {
+            const response = await fetch(url, {
+              credentials: "include",
+              headers: {
+                "Content-Type": "application/json",
+                ...(options.headers || {}),
+              },
+              ...options,
+            });
+
+            let data = {};
+            try {
+              data = await response.json();
+            } catch (e) {
+              data = {};
+            }
+
+            if (!response.ok && data.detail) {
+              throw new Error(data.detail);
+            }
+
+            return data;
+          };
 
           const checkSession = async () => {
             sessionStatus.value = "checking";
             try {
-              // TODO: 调用 API 检查会话
-              await new Promise((resolve) => setTimeout(resolve, 1000));
-              // 模拟检测结果
-              sessionStatus.value = "missing"; // 或 'exists'
+              const response = await fetch("/check_session");
+              const data = await response.json();
+              if (data.exists) {
+                sessionStatus.value = "exists";
+              } else {
+                sessionStatus.value = "missing";
+              }
             } catch (error) {
-              ElementPlus.ElMessage.error("检查失败：" + error.message);
-              sessionStatus.value = "missing";
+              console.error("检查会话失败：", error);
+              sessionStatus.value = "missing"; // 默认为缺失
             }
           };
 
           const saveCredentials = async () => {
             try {
-              // TODO: 调用 API 保存凭证
+              if (!apiCredentials.phoneNumber.startsWith("+")) {
+                throw new Error("手机号必须包含国家代码，例如 +8613812345678");
+              }
               ElementPlus.ElMessage.success("凭证已保存");
               nextStep();
             } catch (error) {
@@ -461,13 +508,68 @@
             }
           };
 
+          const sendCode = async () => {
+            sendingCode.value = true;
+            statusMessage.value = "";
+            phoneCodeHash.value = "";
+            tempSessionString.value = "";
+
+            try {
+              const data = await authenticatedFetch("/start_code", {
+                method: "POST",
+                body: JSON.stringify({
+                  api_id: apiCredentials.apiId,
+                  api_hash: apiCredentials.apiHash,
+                  phone: apiCredentials.phoneNumber,
+                }),
+              });
+
+              if (!data.ok) {
+                throw new Error(data.error || "发送验证码失败");
+              }
+
+              phoneCodeHash.value = data.phone_code_hash || "";
+              tempSessionString.value = data.temp_session_string || "";
+              statusMessage.value =
+                data.message || "验证码已发送，请查收 Telegram 消息";
+              ElementPlus.ElMessage.success("验证码已发送");
+            } catch (error) {
+              ElementPlus.ElMessage.error(error.message || "发送验证码失败");
+            } finally {
+              sendingCode.value = false;
+            }
+          };
+
           const generateSession = async () => {
             generating.value = true;
             try {
-              // TODO: 调用 API 生成会话
-              await new Promise((resolve) => setTimeout(resolve, 2000));
-              sessionString.value =
-                "1BVtsOK4Bu7w..." + Math.random().toString(36).substring(2, 15);
+              const data = await authenticatedFetch("/confirm_code", {
+                method: "POST",
+                body: JSON.stringify({
+                  api_id: apiCredentials.apiId,
+                  api_hash: apiCredentials.apiHash,
+                  phone: apiCredentials.phoneNumber,
+                  code: verificationCode.value,
+                  phone_code_hash: phoneCodeHash.value,
+                  temp_session_string: tempSessionString.value,
+                }),
+              });
+
+              if (!data.ok) {
+                throw new Error(data.error || "生成会话失败");
+              }
+
+              sessionString.value = data.session_string || "";
+
+              await authenticatedFetch("/save_session", {
+                method: "POST",
+                body: JSON.stringify({
+                  session_string: sessionString.value,
+                  auto_reload: true,
+                }),
+              });
+
+              statusMessage.value = data.message || "会话生成成功";
               ElementPlus.ElMessage.success("会话生成成功");
               setTimeout(nextStep, 1000);
             } catch (error) {
@@ -480,8 +582,10 @@
           const testConnection = async () => {
             testing.value = true;
             try {
-              // TODO: 调用 API 测试连接
-              await new Promise((resolve) => setTimeout(resolve, 2000));
+              const data = await authenticatedFetch("/check_session");
+              if (!data.exists) {
+                throw new Error(data.message || "未检测到已保存的会话文件");
+              }
               connectionTest.value = "success";
               ElementPlus.ElMessage.success("连接测试成功");
               setTimeout(() => (currentStep.value = 5), 1000);
@@ -518,8 +622,14 @@
             testing,
             connectionTest,
             connectionError,
+            verificationCode,
+            phoneCodeHash,
+            tempSessionString,
+            sendingCode,
+            statusMessage,
             checkSession,
             saveCredentials,
+            sendCode,
             generateSession,
             testConnection,
             nextStep,

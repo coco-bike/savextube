@@ -124,6 +124,10 @@
         background: #fdf6ec;
         color: #e6a23c;
       }
+      .task-item .task-status.paused {
+        background: #e4e7ed;
+        color: #606266;
+      }
       .task-item .task-info {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
@@ -168,17 +172,8 @@
           <div class="menu-item" @click="goTo('/dashboard')">
             <span>📊</span> 仪表盘
           </div>
-          <div class="menu-item" @click="goTo('/playlists')">
-            <span>📀</span> 歌单管理
-          </div>
-          <div class="menu-item" @click="goTo('/search')">
-            <span>🔍</span> TG 频道搜索
-          </div>
           <div class="menu-item active" @click="goTo('/tasks')">
             <span>📥</span> 下载任务
-          </div>
-          <div class="menu-item" @click="goTo('/settings')">
-            <span>⚙️</span> 系统设置
           </div>
           <div class="menu-item" @click="goTo('/setup')">
             <span>🔧</span> Setup
@@ -214,6 +209,7 @@
             <el-radio-group v-model="activeTab" size="large">
               <el-radio-button label="all">全部任务</el-radio-button>
               <el-radio-button label="processing">进行中</el-radio-button>
+              <el-radio-button label="paused">已暂停</el-radio-button>
               <el-radio-button label="completed">已完成</el-radio-button>
               <el-radio-button label="failed">失败</el-radio-button>
             </el-radio-group>
@@ -221,9 +217,39 @@
 
           <!-- 任务列表 -->
           <div class="task-list">
+            <!-- 加载状态 -->
+            <div
+              v-if="loading"
+              style="text-align: center; padding: 40px; color: #999"
+            >
+              <el-icon class="is-loading" style="font-size: 32px">
+                <svg
+                  viewBox="0 0 1024 1024"
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="32"
+                  height="32"
+                >
+                  <path
+                    fill="currentColor"
+                    d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm0 820c-205.4 0-372-166.6-372-372s166.6-372 372-372 372 166.6 372 372-166.6 372-372 372z"
+                  />
+                </svg>
+              </el-icon>
+              <p style="margin-top: 10px">加载中...</p>
+            </div>
+
+            <!-- 任务卡片 -->
             <div class="task-item" v-for="task in filteredTasks" :key="task.id">
               <div class="task-header">
-                <span class="task-title">{{ task.title }}</span>
+                <div>
+                  <span class="task-title">{{ task.title }}</span>
+                  <span
+                    v-if="task.channel && task.channel !== '-'"
+                    style="margin-left: 10px; font-size: 12px; color: #999"
+                  >
+                    来自：{{ task.channel }}
+                  </span>
+                </div>
                 <span
                   class="task-status"
                   :class="'task-status-' + task.statusType"
@@ -231,44 +257,105 @@
                   {{ task.statusText }}
                 </span>
               </div>
+
+              <!-- 基本信息 -->
               <div class="task-info">
                 <div>📁 类型：{{ task.type }}</div>
-                <div>🎵 歌曲：{{ task.songs }} 首</div>
+                <div>🎵 数量：{{ task.songs }}</div>
                 <div>⏱️ 耗时：{{ task.duration }}</div>
               </div>
-              <div class="task-info" v-if="task.type === '批量下载'">
-                <div>📂 来源：{{ task.source }}</div>
-                <div>🎼 风格：{{ task.style }}</div>
-                <div>📅 时间：{{ task.startTime }}</div>
+
+              <!-- 下载进度信息 (仅在进行中时显示) -->
+              <div class="task-info" v-if="task.statusType === 'processing'">
+                <div v-if="task.speed && task.speed !== '-'">
+                  ⚡ 速度：{{ task.speed }}
+                </div>
+                <div v-if="task.eta && task.eta !== '-'">
+                  ⏳ 剩余：{{ task.eta }}
+                </div>
+                <div>
+                  📝 文件：{{ task.filename ? (task.filename.length > 30 ?
+                  task.filename.substring(0, 30) + '...' : task.filename) :
+                  '...' }}
+                </div>
               </div>
-              <div class="progress-bar" v-if="task.progress < 100">
+
+              <!-- 来源信息 (仅批量下载显示) -->
+              <div
+                class="task-info"
+                v-if="task.type === '批量下载' || task.source !== '系统'"
+              >
+                <div>📂 来源：{{ task.source }}</div>
+              </div>
+
+              <!-- 错误信息 (仅失败时显示) -->
+              <div
+                v-if="task.statusType === 'error' && task.error"
+                style="
+                  background: #fef0f0;
+                  padding: 8px 12px;
+                  border-radius: 4px;
+                  margin-bottom: 10px;
+                  font-size: 13px;
+                  color: #f56c6c;
+                "
+              >
+                ❌ 错误：{{ task.error }}
+              </div>
+
+              <!-- 进度条 (仅在进行中时显示) -->
+              <div
+                class="progress-bar"
+                v-if="task.statusType === 'processing' && task.progress < 100"
+              >
                 <div
                   class="progress"
                   :style="{ width: task.progress + '%' }"
                 ></div>
               </div>
+              <div
+                v-else-if="task.statusType === 'processing'"
+                style="
+                  text-align: center;
+                  color: #409eff;
+                  font-size: 13px;
+                  padding: 5px;
+                "
+              >
+                <el-icon class="is-loading"><Loading /></el-icon> 处理中...
+              </div>
+
+              <!-- 操作按钮 -->
               <div class="task-actions" v-if="task.statusType === 'processing'">
                 <el-button size="small" @click="pauseTask(task)"
-                  >暂停</el-button
+                  >⏸️ 暂停</el-button
                 >
                 <el-button size="small" type="danger" @click="cancelTask(task)"
-                  >取消</el-button
+                  >⏹️ 取消</el-button
+                >
+              </div>
+              <div class="task-actions" v-if="task.statusType === 'paused'">
+                <el-button size="small" type="success" @click="resumeTask(task)"
+                  >▶️ 恢复</el-button
+                >
+                <el-button size="small" type="danger" @click="cancelTask(task)"
+                  >⏹️ 取消</el-button
                 >
               </div>
               <div class="task-actions" v-if="task.statusType === 'completed'">
                 <el-button size="small" type="success" @click="openFolder(task)"
-                  >打开文件夹</el-button
+                  >📁 打开文件夹</el-button
                 >
                 <el-button size="small" @click="retryTask(task)"
-                  >重新下载</el-button
+                  >🔄 重新下载</el-button
                 >
               </div>
-              <div class="task-actions" v-if="task.statusType === 'failed'">
+              <div class="task-actions" v-if="task.statusType === 'error'">
                 <el-button size="small" type="warning" @click="retryTask(task)"
-                  >重试</el-button
+                  >🔄 重试</el-button
                 >
                 <el-button size="small" @click="viewLog(task)"
-                  >查看日志</el-button
+                  >📋 查看日志</el-button
                 >
               </div>
             </div>
@@ -290,124 +377,234 @@
     <script src="https://cdn.jsdelivr.net/npm/vue@3"></script>
     <script src="https://cdn.jsdelivr.net/npm/element-plus"></script>
     <script>
-      const { createApp, reactive, ref, computed } = Vue;
+      const { createApp, reactive, ref, computed, onMounted, onUnmounted } =
+        Vue;
 
       const app = createApp({
         setup() {
           const currentPage = ref("tasks");
           const activeTab = ref("all");
+          const loading = ref(false);
 
-          const tasks = ref([
-            {
-              id: 1,
-              title: "我喜欢的音乐 - 汽水音乐",
-              type: "歌单下载",
-              source: "汽水音乐",
-              style: "混合",
-              songs: 45,
-              progress: 100,
-              statusType: "completed",
-              statusText: "已完成",
-              duration: "15 分钟",
-              startTime: "2026-03-11 10:30",
-            },
-            {
-              id: 2,
-              title: "抖音热歌榜 - QQ 音乐",
-              type: "歌单下载",
-              source: "QQ 音乐",
-              style: "网络热歌",
-              songs: 100,
-              progress: 65,
-              statusType: "processing",
-              statusText: "下载中",
-              duration: "8 分钟",
-              startTime: "2026-03-11 11:20",
-            },
-            {
-              id: 3,
-              title: "告白气球 - 周杰伦",
-              type: "TG 搜索",
-              source: "TG 频道",
-              style: "华语流行",
-              songs: 1,
-              progress: 100,
-              statusType: "completed",
-              statusText: "已完成",
-              duration: "45 秒",
-              startTime: "2026-03-11 09:15",
-            },
-            {
-              id: 4,
-              title: "七里香 - 周杰伦",
-              type: "TG 搜索",
-              source: "TG 频道",
-              style: "华语流行",
-              songs: 1,
-              progress: 0,
-              statusType: "failed",
-              statusText: "下载失败",
-              duration: "-",
-              startTime: "2026-03-11 08:30",
-              error: "未找到无损音源",
-            },
-          ]);
+          const tasks = ref([]);
+
+          // 状态映射
+          const statusMap = {
+            pending: { text: "等待中", class: "pending" },
+            queued: { text: "排队中", class: "pending" },
+            downloading: { text: "下载中", class: "processing" },
+            processing: { text: "处理中", class: "processing" },
+            paused: { text: "已暂停", class: "paused" },
+            completed: { text: "已完成", class: "success" },
+            failed: { text: "失败", class: "error" },
+            cancelled: { text: "已取消", class: "error" },
+          };
+
+          // 格式化任务数据
+          const formatTask = (t) => {
+            const status = statusMap[t.status] || {
+              text: t.status,
+              class: "pending",
+            };
+            return {
+              id: t.id,
+              title: t.title || "未知任务",
+              type: getTaskTypeName(t.type),
+              source:
+                t.source === "telegram" ? "TG 机器人" : t.source || "系统",
+              channel: t.channel || "-",
+              songs: t.extra?.song_count || 1,
+              progress: t.progress_percent || t.progress || 0,
+              statusType: status.class,
+              statusText: status.text,
+              duration: t.duration_text || "-",
+              startTime: t.created_at_text || "-",
+              speed: t.speed_text || "-",
+              eta: t.eta_text || "-",
+              filename: t.filename || "",
+              error: t.error || "",
+              url: t.url || "",
+            };
+          };
+
+          const getTaskTypeName = (type) => {
+            const map = {
+              single: "单曲下载",
+              batch: "批量下载",
+              playlist: "播放列表",
+              channel: "频道下载",
+              album: "专辑下载",
+            };
+            return map[type] || type || "单曲下载";
+          };
 
           const filteredTasks = computed(() => {
             if (activeTab.value === "all") {
               return tasks.value;
             }
-            return tasks.value.filter((t) => t.statusType === activeTab.value);
+            const statusClassMap = {
+              processing: "processing",
+              paused: "paused",
+              completed: "completed",
+              failed: "failed",
+            };
+            const targetClass = statusClassMap[activeTab.value];
+            if (!targetClass) return tasks.value;
+            return tasks.value.filter((t) => t.statusType === targetClass);
           });
 
-          const refreshTasks = () => {
-            ElementPlus.ElMessage.info("刷新任务列表");
-            // TODO: 调用 API 刷新
-          };
+          // 加载任务列表
+          const loadTasks = async () => {
+            if (loading.value) return;
+            loading.value = true;
 
-          const clearCompleted = () => {
-            ElementPlus.ElMessageBox.confirm(
-              "确定要清除所有已完成的任务吗？",
-              "确认清除",
-              { type: "warning" },
-            ).then(() => {
-              tasks.value = tasks.value.filter(
-                (t) => t.statusType !== "completed",
+            try {
+              const response = await fetch(
+                "/api/tasks?status_filter=all&limit=50",
+                {
+                  credentials: "include",
+                },
               );
-              ElementPlus.ElMessage.success("已清除已完成任务");
-            });
+              const result = await response.json();
+
+              if (result.tasks) {
+                tasks.value = result.tasks.map(formatTask);
+              }
+            } catch (error) {
+              console.error("加载任务失败:", error);
+              ElementPlus.ElMessage.error("加载任务列表失败");
+            } finally {
+              loading.value = false;
+            }
           };
 
-          const pauseTask = (task) => {
-            ElementPlus.ElMessage.info(`暂停任务：${task.title}`);
+          const refreshTasks = () => {
+            loadTasks();
+            ElementPlus.ElMessage.success("任务列表已刷新");
           };
 
-          const cancelTask = (task) => {
-            ElementPlus.ElMessageBox.confirm(
-              `确定要取消任务"${task.title}"吗？`,
-              "确认取消",
-              { type: "warning" },
-            ).then(() => {
-              task.statusType = "failed";
-              task.statusText = "已取消";
-              task.progress = 0;
-            });
+          const clearCompleted = async () => {
+            try {
+              await ElementPlus.ElMessageBox.confirm(
+                "确定要清除所有已完成的任务吗？",
+                "确认清除",
+                { type: "warning" },
+              );
+
+              const response = await fetch("/api/tasks/completed", {
+                method: "DELETE",
+                credentials: "include",
+              });
+              const result = await response.json();
+
+              if (result.success) {
+                tasks.value = tasks.value.filter(
+                  (t) => t.statusType !== "completed",
+                );
+                ElementPlus.ElMessage.success(
+                  `已清除 ${result.cleared} 个已完成任务`,
+                );
+              }
+            } catch (error) {
+              if (error !== "cancel") {
+                ElementPlus.ElMessage.error("清除失败");
+              }
+            }
+          };
+
+          const pauseTask = async (task) => {
+            try {
+              const response = await fetch(`/api/tasks/${task.id}/pause`, {
+                method: "POST",
+                credentials: "include",
+              });
+              const result = await response.json();
+
+              if (result.success) {
+                task.statusType = "paused";
+                task.statusText = "已暂停";
+                ElementPlus.ElMessage.success(`任务已暂停：${task.title}`);
+              }
+            } catch (error) {
+              ElementPlus.ElMessage.error("暂停失败");
+            }
+          };
+
+          const resumeTask = async (task) => {
+            try {
+              const response = await fetch(`/api/tasks/${task.id}/resume`, {
+                method: "POST",
+                credentials: "include",
+              });
+              const result = await response.json();
+
+              if (result.success) {
+                task.statusType = "processing";
+                task.statusText = "下载中";
+                ElementPlus.ElMessage.success(`任务已恢复：${task.title}`);
+              }
+            } catch (error) {
+              ElementPlus.ElMessage.error("恢复失败");
+            }
+          };
+
+          const cancelTask = async (task) => {
+            try {
+              await ElementPlus.ElMessageBox.confirm(
+                `确定要取消任务"${task.title}"吗？`,
+                "确认取消",
+                { type: "warning" },
+              );
+
+              const response = await fetch(`/api/tasks/${task.id}/cancel`, {
+                method: "POST",
+                credentials: "include",
+              });
+              const result = await response.json();
+
+              if (result.success) {
+                task.statusType = "error";
+                task.statusText = "已取消";
+                task.progress = 0;
+                ElementPlus.ElMessage.success("任务已取消");
+              }
+            } catch (error) {
+              if (error !== "cancel") {
+                ElementPlus.ElMessage.error("取消失败");
+              }
+            }
           };
 
           const openFolder = (task) => {
             ElementPlus.ElMessage.info(`打开文件夹：${task.title}`);
+            // TODO: 调用 API 打开文件夹
           };
 
-          const retryTask = (task) => {
-            ElementPlus.ElMessage.info(`重试任务：${task.title}`);
-            task.statusType = "processing";
-            task.statusText = "下载中";
-            task.progress = 0;
+          const retryTask = async (task) => {
+            try {
+              const response = await fetch(`/api/tasks/${task.id}/retry`, {
+                method: "POST",
+                credentials: "include",
+              });
+              const result = await response.json();
+
+              if (result.success) {
+                task.statusType = "processing";
+                task.statusText = "下载中";
+                task.progress = 0;
+                ElementPlus.ElMessage.success("任务已重新排队");
+              }
+            } catch (error) {
+              ElementPlus.ElMessage.error("重试失败");
+            }
           };
 
           const viewLog = (task) => {
-            ElementPlus.ElMessage.info(
-              `查看日志：${task.title}\n错误：${task.error || "未知"}`,
+            const errorMsg = task.error || "未知错误";
+            ElementPlus.ElMessageBox.alert(
+              `任务：${task.title}\n\n错误信息：\n${errorMsg}`,
+              "查看日志",
+              { type: "warning" },
             );
           };
 
@@ -420,12 +617,30 @@
             window.location.href = "/";
           };
 
+          // 生命周期钩子
+          onMounted(() => {
+            loadTasks();
+
+            // 定期刷新任务列表（每 10 秒）
+            const refreshInterval = setInterval(() => {
+              loadTasks();
+            }, 10000);
+
+            // 清理定时器
+            onUnmounted(() => {
+              if (refreshInterval) {
+                clearInterval(refreshInterval);
+              }
+            });
+          });
+
           return {
             currentPage,
             goTo,
             activeTab,
             tasks,
             filteredTasks,
+            loading,
             refreshTasks,
             clearCompleted,
             pauseTask,
