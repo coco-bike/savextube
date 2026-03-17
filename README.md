@@ -238,7 +238,7 @@ Wrapper 可以作为独立服务运行，也可以直接集成到 **SavexTube �
 ```yaml
 services:
   savextube:
-    image: savextube/savextube:v0.6.17
+    image: sbkdockerhub/savextube:latest
     container_name: savextube
     restart: unless-stopped
     environment:
@@ -278,7 +278,7 @@ services:
 ```yaml
 services:
   savextube:
-    image: savextube/savextube:latest
+    image: sbkdockerhub/savextube:latest
     container_name: savextube
     restart: unless-stopped
     environment:
