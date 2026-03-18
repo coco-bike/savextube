@@ -6090,9 +6090,8 @@ class TelegramBot:
                     logger.error(f"❌ 重连最终失败: {e}")
                     # 不再 raise，避免应用崩溃，让心跳机制继续尝试
 
-        finally:
-            # 无论成功与否，都标记重连结束
-            self._is_reconnecting = False
+        # 无论成功与否，都标记重连结束
+        self._is_reconnecting = False
 
     # 网络监控功能已删除，避免事件循环冲突
 
