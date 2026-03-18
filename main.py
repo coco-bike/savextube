@@ -5146,6 +5146,16 @@ class TelegramBot:
         self.allowed_user_ids = self._parse_user_ids(os.getenv("TELEGRAM_BOT_ALLOWED_USER_IDS", ""))
         logger.info(f"🔐 允许的用户: {self.allowed_user_ids}")
 
+        # 新增：自动重连机制状态变量
+        self._reconnect_lock = asyncio.Lock()  # 重连互斥锁，防止并发重连
+        self._is_reconnecting = False  # 是否正在重连中
+        self._last_reconnect_time = 0  # 上次重连时间戳
+        self._reconnect_cooldown = 30  # 重连冷却时间（秒）
+        self._heartbeat_fail_count = 0  # 心跳失败计数
+        self._max_heartbeat_failures = 3  # 最大允许心跳失败次数
+        self._reconnect_count = 0  # 重连次数统计
+        logger.info("✅ 自动重连机制已初始化")
+
     async def hot_reload_user_client(self, session_string: str, api_id: Optional[str] = None, api_hash: Optional[str] = None) -> str:
         """在主事件循环中热重载 Telethon user_client"""
         try:
@@ -5937,9 +5947,32 @@ class TelegramBot:
 
     # 健康检查功能已删除，避免事件循环冲突
 
-    async def _restart_bot_connection(self):
-        """重启Bot连接"""
-        logger.info("🔄 开始重启Bot连接...")
+    async def _restart_bot_connection(self, reason: str = "未知原因"):
+        """重启Bot连接（带防抖机制）
+
+        Args:
+            reason: 触发重连的原因，用于日志记录
+        """
+        # 使用互斥锁防止并发重连
+        async with self._reconnect_lock:
+            # 检查是否正在重连中
+            if self._is_reconnecting:
+                logger.info("⏳ 重连正在进行中，跳过本次重连请求")
+                return
+
+            # 检查冷却时间
+            current_time = time.time()
+            time_since_last = current_time - self._last_reconnect_time
+            if time_since_last < self._reconnect_cooldown:
+                logger.info(f"⏳ 重连冷却中，距离上次重连仅 {time_since_last:.1f} 秒，跳过本次请求")
+                return
+
+            # 标记开始重连
+            self._is_reconnecting = True
+            self._last_reconnect_time = current_time
+            self._reconnect_count += 1
+
+        logger.warning(f"🔄 开始第 {self._reconnect_count} 次重启Bot连接，原因: {reason}")
 
         try:
             # 停止当前的polling
@@ -5947,23 +5980,36 @@ class TelegramBot:
                 await self.application.updater.stop()
                 logger.info("📴 已停止当前polling")
 
-            # 等待一段时间
+            # 等待一段时间，让网络资源释放
             await asyncio.sleep(5)
 
             # 重新启动polling
             await self.application.updater.start_polling(
                 timeout=30
             )
-            logger.info("📡 已重新启动polling")
+            logger.info("✅ 已重新启动polling")
+
+            # 重置心跳失败计数
+            self._heartbeat_fail_count = 0
+            logger.info(f"🎉 Bot连接重启成功！累计重连次数: {self._reconnect_count}")
+
+            # 重连成功后，尝试重新设置菜单命令（如果之前失败过）
+            try:
+                await self._setup_bot_commands(self.application.bot)
+            except Exception as menu_error:
+                logger.warning(f"⚠️ 重连后设置菜单命令失败（非关键错误）: {menu_error}")
 
         except Exception as e:
             logger.error(f"❌ 重启Bot连接失败: {e}")
             raise e
+        finally:
+            # 无论成功与否，都标记重连结束
+            self._is_reconnecting = False
 
     # 网络监控功能已删除，避免事件循环冲突
 
     async def _keep_alive_heartbeat(self):
-        """保持连接活跃的心跳机制"""
+        """保持连接活跃的心跳机制（带自动重连）"""
         heartbeat_interval = int(os.getenv("HEARTBEAT_INTERVAL", "300"))  # 5分钟发送一次心跳
 
         while True:
@@ -5973,10 +6019,24 @@ class TelegramBot:
                 # 发送一个轻量级的API调用来保持连接活跃
                 try:
                     await self.application.bot.get_me()
-                    logger.debug("💓 心跳保持连接活跃")
+                    # 心跳成功，重置失败计数
+                    if self._heartbeat_fail_count > 0:
+                        logger.info(f"💓 心跳恢复成功，重置失败计数（之前连续失败 {self._heartbeat_fail_count} 次）")
+                        self._heartbeat_fail_count = 0
+                    else:
+                        logger.debug("💓 心跳保持连接活跃")
                 except Exception as e:
-                    logger.warning(f"💔 心跳失败: {e}")
-                    # 心跳失败不需要特殊处理，健康检查会处理
+                    self._heartbeat_fail_count += 1
+                    logger.warning(f"💔 心跳失败 ({self._heartbeat_fail_count}/{self._max_heartbeat_failures}): {e}")
+
+                    # 如果连续失败达到阈值，触发重连
+                    if self._heartbeat_fail_count >= self._max_heartbeat_failures:
+                        logger.error(f"🚨 心跳连续失败 {self._max_heartbeat_failures} 次，触发自动重连")
+                        try:
+                            await self._restart_bot_connection(reason=f"心跳连续失败 {self._max_heartbeat_failures} 次")
+                        except Exception as reconnect_error:
+                            logger.error(f"❌ 心跳触发的重连失败: {reconnect_error}")
+                            # 重连失败后继续尝试，不退出循环
 
             except Exception as e:
                 logger.error(f"❌ 心跳机制异常: {e}")
@@ -10397,7 +10457,7 @@ class TelegramBot:
             )
 
     async def error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """记录所有 PTB 抛出的错误并处理网络错误"""
+        """记录所有 PTB 抛出的错误并处理网络错误（带自动重连）"""
         error = context.error
         error_msg = str(error)
         error_type = type(error).__name__
@@ -10413,18 +10473,29 @@ class TelegramBot:
             'pool timeout', 'proxy', 'gateway', 'service unavailable'
         ])
 
-        if is_network_error:
+        # 检查是否为严重网络错误（需要立即重连）
+        is_critical_network_error = is_network_error and any(critical in error_msg.lower() for critical in [
+            'connection reset', 'connection aborted', 'broken pipe', 'ssl',
+            'connection refused', 'unreachable', 'dns', 'resolve'
+        ])
+
+        if is_critical_network_error:
+            logger.warning(f"🚨 检测到严重网络错误: {error_type}: {error_msg}")
+            # 异步触发重连，避免阻塞错误处理
+            asyncio.create_task(self._handle_critical_network_error(error_msg))
+        elif is_network_error:
             logger.warning(f"🌐 检测到网络错误: {error_type}: {error_msg}")
-            logger.info("🔄 网络错误将由健康检查机制自动处理")
+            logger.info("🔄 网络错误将由心跳机制自动处理")
         else:
             logger.error(f"❌ PTB 错误: {error_type}: {error_msg}", exc_info=error)
 
-        # 对于严重的网络错误，触发立即健康检查
-        if is_network_error and any(critical in error_msg.lower() for critical in [
-            'connection reset', 'connection aborted', 'broken pipe', 'ssl'
-        ]):
-            logger.warning("🚨 检测到严重网络错误，触发立即健康检查")
-            # 这里可以触发立即的健康检查，但要避免递归调用
+    async def _handle_critical_network_error(self, error_msg: str):
+        """处理严重网络错误，触发自动重连"""
+        try:
+            logger.warning(f"🔄 严重网络错误处理: 触发自动重连")
+            await self._restart_bot_connection(reason=f"严重网络错误: {error_msg[:50]}...")
+        except Exception as e:
+            logger.error(f"❌ 严重网络错误触发的重连失败: {e}")
 
     def _make_progress_bar(self, percent: float) -> str:
         """生成进度条"""
