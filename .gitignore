@@ -1,0 +1,208 @@
+# ============================================
+# SaveXTube Telegram Bot - Git Ignore File
+# ============================================
+
+# ----------------------------------------
+# Python
+# ----------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ----------------------------------------
+# Virtual Environment
+# ----------------------------------------
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ----------------------------------------
+# IDE & Editors
+# ----------------------------------------
+# VS Code
+.vscode/
+*.code-workspace
+
+# PyCharm / IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+#*#
+.#*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# ----------------------------------------
+# Project Specific - Downloads
+# ----------------------------------------
+# 下载的视频/音频文件（所有平台）
+/downloads/
+/downloads/*/
+/youtube/
+/bilibili/
+/x/
+/twitter/
+/xvideos/
+/pornhub/
+/douyin/
+/kuaishou/
+/toutiao/
+/facebook/
+/xiaohongshu/
+/weibo/
+/instagram/
+/netease/
+/qqmusic/
+/applemusic/
+/youtubemusic/
+/telegraph/
+
+# ----------------------------------------
+# Project Specific - Logs
+# ----------------------------------------
+/logs/
+/logs/*/
+*.log
+*.log.*
+log/
+
+# ----------------------------------------
+# Project Specific - Config & Secrets
+# ----------------------------------------
+# 配置文件（包含敏感信息）
+*.toml
+!*.example.toml
+!savextube.toml.example
+
+# Cookies 文件（敏感）
+*.cookies
+*.cookie
+cookies/
+cookies.txt
+youtube_cookies.txt
+bilibili_cookies.txt
+x_cookies.txt
+instagram_cookies.txt
+
+# 数据库文件
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+
+# Session 文件（Telethon）
+*.session
+*.session-journal
+*.session-shm
+*.session-wal
+
+# API 密钥和令牌文件
+*_token*
+*api_key*
+*secret*
+
+# ----------------------------------------
+# Project Specific - Backups
+# ----------------------------------------
+*.backup.*
+*.bak
+*.old
+*.orig
+*.patch
+
+# ----------------------------------------
+# Project Specific - Temp Files
+# ----------------------------------------
+/temp/
+/tmp/
+/tempfiles/
+*.tmp
+*.temp
+*.part
+*.crdownload
+
+# ----------------------------------------
+# Docker
+# ----------------------------------------
+# 可以选择忽略或不忽略，根据你的需求
+# docker-compose.override.yml
+
+# ----------------------------------------
+# Testing
+# ----------------------------------------
+/test/downloads/
+/test/logs/
+/test/temp/
+.coverage
+.pytest_cache/
+.tox/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# ----------------------------------------
+# Documentation Build
+# ----------------------------------------
+/docs/_build/
+/site/
+
+# ----------------------------------------
+# Misc
+# ----------------------------------------
+*.pid
+*.seed
+*.pid.lock
