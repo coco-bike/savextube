@@ -27,7 +27,7 @@ ENV PYTHONUNBUFFERED=1 \
     DOWNLOAD_PATH=/downloads
 
 # 安装系统依赖
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --fix-missing \
     curl  \
     wget  \
     git   \
@@ -62,6 +62,10 @@ RUN apt-get update && apt-get install -y \
     libxrender1 \
     libxss1 \
     libxtst6 \
+    && rm -rf /var/lib/apt/lists/*;
+
+RUN apt-get update && apt-get install -y --fix-missing \
+    aria2 \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制依赖文件
@@ -121,6 +125,9 @@ RUN cd /tmp && \
 
 # 复制应用代码
 COPY . .
+
+# 删除配置文件（应该通过挂载提供，而不是打包在镜像中）
+RUN rm -f savextube.toml && echo "✅ 已删除打包的配置文件，将使用挂载的配置"
 
 # 创建下载目录
 RUN mkdir -p /downloads/x /downloads/youtube \

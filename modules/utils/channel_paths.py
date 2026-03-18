@@ -55,14 +55,10 @@ def attach_channel_paths(downloader, channel_paths: Dict[str, Path]) -> None:
     downloader.apple_music_download_path = channel_paths["apple_music"]
 
 
-def create_enabled_channel_dirs(channel_paths: Dict[str, Path], channel_switches: Dict[str, bool], logger) -> None:
-    """仅为启用的渠道创建目录。"""
+def create_channel_dirs(channel_paths: Dict[str, Path], logger) -> None:
+    """为所有渠道创建目录。"""
     for channel_key, path in channel_paths.items():
-        enabled = channel_switches.get(channel_key, True)
-        if enabled:
-            path.mkdir(parents=True, exist_ok=True)
-        else:
-            logger.info(f"⏭️ 渠道已禁用，跳过创建目录: {channel_key} -> {path}")
+        path.mkdir(parents=True, exist_ok=True)
 
     logger.info(f"X 下载路径: {channel_paths['x']}")
     logger.info(f"YouTube 下载路径: {channel_paths['youtube']}")

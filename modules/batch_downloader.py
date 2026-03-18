@@ -14,17 +14,19 @@ logger = logging.getLogger(__name__)
 
 class BatchDownloadProcessor:
     """批量下载处理器"""
-    
-    def __init__(self, multithread_downloader, max_concurrent: int = 3):
+
+    def __init__(self, multithread_downloader, max_concurrent: int = 3, download_path: str = "/downloads"):
         """
         初始化批量下载处理器
-        
+
         Args:
             multithread_downloader: 多线程下载器实例
             max_concurrent: 最大并发下载数
+            download_path: 下载根目录路径，默认 /downloads
         """
         self.downloader = multithread_downloader
         self.max_concurrent = max_concurrent
+        self.download_path = Path(download_path)
         self.semaphore = asyncio.Semaphore(max_concurrent)
     
     async def download_batch(

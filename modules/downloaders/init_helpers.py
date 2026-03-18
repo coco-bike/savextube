@@ -90,11 +90,6 @@ def init_instagram_downloader(downloader, *, logger) -> None:
 
 def init_apple_music_downloader(downloader, *, logger) -> None:
     """初始化 Apple Music 下载器。"""
-    if not downloader.channel_switches.get("apple_music", True):
-        logger.info("⏭️ Apple Music 渠道已禁用，跳过下载器初始化")
-        downloader.apple_music_downloader = None
-        return
-
     try:
         use_amd = os.environ.get("AMDP", "").lower() == "true"
         output_dir = str(downloader.apple_music_download_path)

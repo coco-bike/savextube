@@ -139,9 +139,7 @@ SaveXTube 是一个基于 Telegram 的智能多媒体下载工具，支持视频
 2. 填写必需信息
 
 - **API ID**
-
 - **API Hash**
-
 - **Telegram 手机号**（接收验证码登录）
 
   ⚡ 成功后，系统会在指定目录自动生成 **会话文件**。
@@ -352,6 +350,7 @@ volumes:
 按照以下格式填写内容并保存为`savextube.toml`存放在config目录：
 
 ```toml
+
 # SaveXTube 完整配置文件
 # 创建文件时，若需要保留中文注释，请务必确保本文件编码为 UTF-8，否则会无法读取。
 
@@ -385,6 +384,10 @@ amd_region = "cn"
 # Bilibili 配置
 bilibili_poll_interval = 60
 
+[youtube]
+# YouTube 配置
+youtube_convert_to_mp4 = true
+
 [qbittorrent]
 # qBittorrent 连接配置
 qb_host = "192.168.2.134"
@@ -401,9 +404,20 @@ log_backup_count = 5
 log_to_console = true
 log_to_file = true
 
-[youtube]
-# YouTube 配置
-youtube_convert_to_mp4 = true
+[multithread]
+# 多线程下载配置
+# 单个文件的下载线程数（推荐 8-32）
+mt_file_threads = 16
+# 同时下载的文件数量（推荐 2-5）
+mt_concurrent_files = 3
+# 是否使用 aria2c 加速器（true/false）
+mt_use_aria2c = true
+# aria2c 服务器连接数（推荐 8-16）
+mt_aria2c_connections = 16
+# 每个服务器的分片数（推荐 8-16）
+mt_aria2c_splits = 16
+# 下载速度限制（0 表示不限制），格式：500K, 1M, 10M
+mt_speed_limit = "0"
 ```
 
 ## 📖 使用方法

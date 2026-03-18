@@ -184,11 +184,6 @@ except ImportError:
     print_config_summary = None
     CONFIG_READER_AVAILABLE = False
 
-try:
-    from modules.config.channel_switches import load_channel_switches
-except ImportError:
-    load_channel_switches = None
-
 # 适配器：为缺少 download_album_by_id 的旧版 NeteaseDownloader 提供兼容实现
 class _NeteaseDownloaderAdapter:
     def __init__(self, base):
@@ -461,7 +456,7 @@ from modules.utils.async_utils import edit_message_threadsafe
 from modules.utils.channel_paths import (
     attach_channel_paths,
     build_channel_paths,
-    create_enabled_channel_dirs,
+    create_channel_dirs,
 )
 from modules.utils.network_init import configure_proxy_for_downloader
 from modules.downloaders.init_helpers import (
@@ -865,7 +860,6 @@ class VideoDownloader:
         self.instagram_cookies_path = instagram_cookies_path
         self.apple_music_cookies_path = os.environ.get("APPLEMUSIC_COOKIES") or os.environ.get("APPLEMUSIC_COOKIE_FILE") or "/app/cookies/apple_music_cookies.txt"
         self.proxy_host = os.environ.get("PROXY_HOST")
-        self.channel_switches = load_channel_switches() if callable(load_channel_switches) else {}
         self.channel_paths = build_channel_paths(self.download_path)
         attach_channel_paths(self, self.channel_paths)
         
@@ -901,7 +895,7 @@ class VideoDownloader:
             os.getenv("YOUTUBE_CONVERT_TO_MP4", "true").lower() == "true"
         )
         logger.info(f"视频格式转换: {'开启' if self.convert_to_mp4 else '关闭'}")
-        create_enabled_channel_dirs(self.channel_paths, self.channel_switches, logger)
+        create_channel_dirs(self.channel_paths, logger)
         # 如果设置了 Bilibili cookies，记录日志
         if self.b_cookies_path:
             logger.info(f"Bilibili Cookies 路径: {self.b_cookies_path}")
@@ -5151,9 +5145,16 @@ class TelegramBot:
         self._is_reconnecting = False  # 是否正在重连中
         self._last_reconnect_time = 0  # 上次重连时间戳
         self._reconnect_cooldown = 30  # 重连冷却时间（秒）
-        self._heartbeat_fail_count = 0  # 心跳失败计数
+        self._heartbeat_fail_count = 0  # PTB 心跳失败计数
         self._max_heartbeat_failures = 3  # 最大允许心跳失败次数
         self._reconnect_count = 0  # 重连次数统计
+        
+        # Telethon 心跳机制状态变量
+        self._telethon_heartbeat_fail_count = 0  # Telethon 心跳失败计数
+        self._telethon_reconnect_count = 0  # Telethon 重连次数统计
+        self._telethon_last_reconnect_time = 0  # Telethon 上次重连时间戳
+        self._telethon_reconnect_cooldown = 60  # Telethon 重连冷却时间（秒）
+        
         logger.info("✅ 自动重连机制已初始化")
 
     async def hot_reload_user_client(self, session_string: str, api_id: Optional[str] = None, api_hash: Optional[str] = None) -> str:
@@ -5195,6 +5196,15 @@ class TelegramBot:
             await client.start()
             self.user_client = client
             logger.info("✅ Telethon 客户端热重载成功")
+            
+            # 启动 Telethon 心跳检测
+            if self.main_loop:
+                asyncio.run_coroutine_threadsafe(
+                    self._keep_alive_telethon_heartbeat(),
+                    self.main_loop
+                )
+                logger.info("🔔 Telethon 心跳检测已启动（热重载后）")
+            
             return "ok"
         except Exception as e:
             logger.error(f"❌ Telethon 客户端热重载失败: {e}", exc_info=True)
@@ -5472,25 +5482,50 @@ class TelegramBot:
 
     async def post_init(self, application: Application):
         """在应用启动后运行的初始化任务, 获取机器人自身 ID"""
-        print("🚀 [INIT] post_init 开始执行...")
-        bot_info = await application.bot.get_me()
-        self.bot_id = bot_info.id
-        print(f"🤖 [INIT] 机器人已启动: @{bot_info.username} (ID: {self.bot_id})")
-        logger.info(f"机器人已启动，用户名为: @{bot_info.username} (ID: {self.bot_id})")
+        logger.info("🚀 [INIT] post_init 开始执行...")
+
+        try:
+            bot_info = await application.bot.get_me()
+            self.bot_id = bot_info.id
+
+            # 打印详细的机器人信息
+            bot_name = bot_info.first_name or "未知"
+            bot_username = bot_info.username or "未知"
+            can_join_groups = "✅" if bot_info.can_join_groups else "❌"
+            can_read_all_group_messages = "✅" if bot_info.can_read_all_group_messages else "❌"
+            supports_inline_queries = "✅" if bot_info.supports_inline_queries else "❌"
+
+            logger.info("=" * 50)
+            logger.info("🤖 Telegram Bot 信息")
+            logger.info("=" * 50)
+            logger.info(f"  名称: {bot_name}")
+            logger.info(f"  用户名: @{bot_username}")
+            logger.info(f"  ID: {self.bot_id}")
+            logger.info(f"  可加入群组: {can_join_groups}")
+            logger.info(f"  可读取所有群组消息: {can_read_all_group_messages}")
+            logger.info(f"  支持内联查询: {supports_inline_queries}")
+            logger.info("=" * 50)
+
+            logger.info(f"机器人已启动: {bot_name} (@{bot_username}, ID: {self.bot_id})")
+        except Exception as e:
+            logger.error(f"❌ [INIT] post_init 执行失败: {e}", exc_info=True)
+            raise
 
         # 设置命令菜单
-        print("🔧 [INIT] 准备设置命令菜单...")
-        await self._setup_bot_commands(application.bot)
-        print("✅ [INIT] post_init 执行完成")
+        logger.info("🔧 [INIT] 准备设置命令菜单...")
+        try:
+            await self._setup_bot_commands(application.bot)
+            logger.info("✅ [INIT] 命令菜单设置完成")
+        except Exception as menu_error:
+            logger.warning(f"⚠️ [INIT] 命令菜单设置失败（非关键错误）: {menu_error}")
 
     async def _setup_bot_commands(self, bot: Bot):
         """设置Bot命令菜单"""
         try:
-            print("🔧 [MENU] 开始设置Telegram Bot命令菜单...")
             logger.info("🔧 开始设置Telegram Bot命令菜单...")
 
             # 定义命令菜单
-            from telegram import BotCommand
+            from telegram import BotCommand, BotCommandScopeDefault
             commands = [
                 BotCommand("start", "🏁 开始使用"),
                 BotCommand("help", "📖 查看帮助"),
@@ -5502,37 +5537,27 @@ class TelegramBot:
                 BotCommand("reboot", "🔄 重启容器"),
             ]
 
-            print(f"🔧 [MENU] 准备设置 {len(commands)} 个命令")
             for i, cmd in enumerate(commands, 1):
                 print(f"  {i}. /{cmd.command} - {cmd.description}")
 
-            # 设置命令菜单
-            print("🔧 [MENU] 正在调用 set_my_commands...")
-            await bot.set_my_commands(commands)
-            print("✅ [MENU] set_my_commands 调用成功")
+            # 设置命令菜单（显式指定作用域为默认私聊）
+            await bot.set_my_commands(commands, scope=BotCommandScopeDefault())
             logger.info(f"✅ 已成功设置Telegram Bot命令菜单，共 {len(commands)} 个命令")
 
             # 验证设置
-            print("🔍 [MENU] 验证命令菜单设置...")
             set_commands = await bot.get_my_commands()
-            print(f"🔍 [MENU] 获取到 {len(set_commands)} 个已设置的命令")
 
             if len(set_commands) == len(commands):
-                print("🎉 [MENU] 命令菜单设置完全成功！")
                 logger.info("🎉 命令菜单设置完全成功！")
                 logger.info("📋 可用命令:")
                 for cmd in set_commands:
-                    print(f"  ✅ /{cmd.command} - {cmd.description}")
                     logger.info(f"  /{cmd.command} - {cmd.description}")
             else:
-                print(f"⚠️ [MENU] 命令菜单设置可能有问题，期望 {len(commands)} 个，实际 {len(set_commands)} 个")
                 logger.warning(f"⚠️ 命令菜单设置可能有问题，期望 {len(commands)} 个，实际 {len(set_commands)} 个")
 
         except Exception as e:
-            print(f"❌ [MENU] 设置命令菜单失败: {e}")
             logger.error(f"❌ 设置命令菜单失败: {e}")
             import traceback
-            print(f"❌ [MENU] 详细错误: {traceback.format_exc()}")
             logger.error(f"详细错误: {traceback.format_exc()}")
 
     def _connect_qbittorrent(self):
@@ -5905,15 +5930,49 @@ class TelegramBot:
                 await self.application.initialize()
                 await self.application.start()
 
-                # 配置更强的网络参数
+                # 兜底：当前使用 initialize/start/start_polling 手动启动链路，
+                # PTB 在该链路下可能不会自动触发 post_init。
+                # 因此这里显式执行一次，确保菜单与启动初始化逻辑生效。
+                try:
+                    logger.info("🔧 [INIT-FALLBACK] 手动执行 post_init（非 run_polling 链路兜底）...")
+                    await self.post_init(self.application)
+                    logger.info("✅ [INIT-FALLBACK] 手动 post_init 执行完成")
+                except Exception as init_error:
+                    logger.warning(f"⚠️ [INIT-FALLBACK] 手动 post_init 失败，尝试直接注册菜单: {init_error}")
+                    try:
+                        await self._setup_bot_commands(self.application.bot)
+                        logger.info("✅ [INIT-FALLBACK] 已直接完成菜单注册兜底")
+                    except Exception as menu_error:
+                        logger.error(f"❌ [INIT-FALLBACK] 菜单注册兜底失败: {menu_error}")
+
+                # 配置更强的网络参数，添加错误回调（必须是普通函数，不能是协程）
+                def polling_error_callback(error: Exception):
+                    """Polling 过程中的错误回调"""
+                    logger.error(f"⚠️ Polling 错误: {type(error).__name__}: {error}")
+                    # 触发重连（使用 create_task 在当前事件循环中调度）
+                    if hasattr(self, 'main_loop') and self.main_loop:
+                        asyncio.run_coroutine_threadsafe(
+                            self._restart_bot_connection(reason=f"Polling 错误: {type(error).__name__}"),
+                            self.main_loop
+                        )
+                
                 await self.application.updater.start_polling(
-                    timeout=30  # 增加超时时间
+                    timeout=30,  # 增加超时时间
+                    error_callback=polling_error_callback,
+                    drop_pending_updates=True  # 丢弃待处理的更新，避免重复处理
                 )
 
                 logger.info("机器人已成功启动并正在运行。")
 
-                # 健康检查功能已删除，避免事件循环冲突
+                # 启动 PTB 心跳检测
                 asyncio.create_task(self._keep_alive_heartbeat())
+                
+                # 启动 Telethon 心跳检测（如果客户端已初始化）
+                if self.user_client:
+                    asyncio.create_task(self._keep_alive_telethon_heartbeat())
+                    logger.info("🔔 Telethon 心跳检测已启动")
+                else:
+                    logger.info("⏳ Telethon 客户端未初始化，心跳检测将在热重载后启动")
 
                 # 启动B站收藏夹订阅检查任务
                 if self.fav_manager:
@@ -5958,6 +6017,8 @@ class TelegramBot:
             # 检查是否正在重连中
             if self._is_reconnecting:
                 logger.info("⏳ 重连正在进行中，跳过本次重连请求")
+                # 重置心跳失败计数，避免无限累积
+                self._heartbeat_fail_count = 0
                 return
 
             # 检查冷却时间
@@ -5965,6 +6026,8 @@ class TelegramBot:
             time_since_last = current_time - self._last_reconnect_time
             if time_since_last < self._reconnect_cooldown:
                 logger.info(f"⏳ 重连冷却中，距离上次重连仅 {time_since_last:.1f} 秒，跳过本次请求")
+                # 重置心跳失败计数，避免无限累积
+                self._heartbeat_fail_count = 0
                 return
 
             # 标记开始重连
@@ -5974,34 +6037,59 @@ class TelegramBot:
 
         logger.warning(f"🔄 开始第 {self._reconnect_count} 次重启Bot连接，原因: {reason}")
 
-        try:
-            # 停止当前的polling
-            if self.application.updater.running:
-                await self.application.updater.stop()
-                logger.info("📴 已停止当前polling")
+        max_retries = 3
+        retry_delay = 10  # 每次重试等待10秒
 
-            # 等待一段时间，让网络资源释放
-            await asyncio.sleep(5)
-
-            # 重新启动polling
-            await self.application.updater.start_polling(
-                timeout=30
-            )
-            logger.info("✅ 已重新启动polling")
-
-            # 重置心跳失败计数
-            self._heartbeat_fail_count = 0
-            logger.info(f"🎉 Bot连接重启成功！累计重连次数: {self._reconnect_count}")
-
-            # 重连成功后，尝试重新设置菜单命令（如果之前失败过）
+        for attempt in range(max_retries):
             try:
-                await self._setup_bot_commands(self.application.bot)
-            except Exception as menu_error:
-                logger.warning(f"⚠️ 重连后设置菜单命令失败（非关键错误）: {menu_error}")
+                # 停止当前的polling
+                if self.application.updater.running:
+                    await self.application.updater.stop()
+                    logger.info("📴 已停止当前polling")
 
-        except Exception as e:
-            logger.error(f"❌ 重启Bot连接失败: {e}")
-            raise e
+                # 等待一段时间，让网络资源释放
+                await asyncio.sleep(5)
+
+                # 重新启动polling（添加错误回调）
+                def polling_error_callback_reconnect(error: Exception):
+                    """Polling 过程中的错误回调（重连后）"""
+                    logger.error(f"⚠️ 重连后 Polling 错误: {type(error).__name__}: {error}")
+                    if hasattr(self, 'main_loop') and self.main_loop:
+                        asyncio.run_coroutine_threadsafe(
+                            self._restart_bot_connection(reason=f"重连后 Polling 错误: {type(error).__name__}"),
+                            self.main_loop
+                        )
+                
+                await self.application.updater.start_polling(
+                    timeout=30,
+                    error_callback=polling_error_callback_reconnect,
+                    drop_pending_updates=True
+                )
+                logger.info("✅ 已重新启动polling")
+
+                # 重置心跳失败计数
+                self._heartbeat_fail_count = 0
+                logger.info(f"🎉 Bot连接重启成功！累计重连次数: {self._reconnect_count}")
+
+                # 重连成功后，尝试重新设置菜单命令（如果之前失败过）
+                try:
+                    await self._setup_bot_commands(self.application.bot)
+                except Exception as menu_error:
+                    logger.warning(f"⚠️ 重连后设置菜单命令失败（非关键错误）: {menu_error}")
+
+                # 重连成功，跳出循环
+                return
+
+            except Exception as e:
+                logger.warning(f"⚠️ 重连尝试 {attempt + 1}/{max_retries} 失败: {e}")
+                if attempt < max_retries - 1:
+                    logger.info(f"⏳ 等待 {retry_delay} 秒后重试...")
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 2  # 指数退避
+                else:
+                    logger.error(f"❌ 重连最终失败: {e}")
+                    # 不再 raise，避免应用崩溃，让心跳机制继续尝试
+
         finally:
             # 无论成功与否，都标记重连结束
             self._is_reconnecting = False
@@ -6010,7 +6098,7 @@ class TelegramBot:
 
     async def _keep_alive_heartbeat(self):
         """保持连接活跃的心跳机制（带自动重连）"""
-        heartbeat_interval = int(os.getenv("HEARTBEAT_INTERVAL", "300"))  # 5分钟发送一次心跳
+        heartbeat_interval = int(os.getenv("HEARTBEAT_INTERVAL", "60"))  # 默认60秒检测一次
 
         while True:
             try:
@@ -6028,19 +6116,124 @@ class TelegramBot:
                 except Exception as e:
                     self._heartbeat_fail_count += 1
                     logger.warning(f"💔 心跳失败 ({self._heartbeat_fail_count}/{self._max_heartbeat_failures}): {e}")
+                    logger.info(f"🔍 [DEBUG] 当前重连状态: _is_reconnecting={self._is_reconnecting}, _last_reconnect_time={self._last_reconnect_time}")
 
                     # 如果连续失败达到阈值，触发重连
                     if self._heartbeat_fail_count >= self._max_heartbeat_failures:
                         logger.error(f"🚨 心跳连续失败 {self._max_heartbeat_failures} 次，触发自动重连")
+                        logger.info(f"🔍 [DEBUG] 准备调用 _restart_bot_connection...")
                         try:
                             await self._restart_bot_connection(reason=f"心跳连续失败 {self._max_heartbeat_failures} 次")
+                            logger.info(f"🔍 [DEBUG] _restart_bot_connection 调用完成")
                         except Exception as reconnect_error:
                             logger.error(f"❌ 心跳触发的重连失败: {reconnect_error}")
+                            logger.error(f"🔍 [DEBUG] 重连异常详情: {type(reconnect_error).__name__}")
                             # 重连失败后继续尝试，不退出循环
 
             except Exception as e:
                 logger.error(f"❌ 心跳机制异常: {e}")
                 await asyncio.sleep(60)  # 异常时等待1分钟
+
+    async def _keep_alive_telethon_heartbeat(self):
+        """Telethon 客户端心跳检测和自动重连"""
+        heartbeat_interval = int(os.getenv("TELETHON_HEARTBEAT_INTERVAL", "60"))  # 默认60秒
+
+        while True:
+            try:
+                await asyncio.sleep(heartbeat_interval)
+
+                # 检查 Telethon 客户端是否存在且已连接
+                if not self.user_client:
+                    logger.debug("⏳ Telethon 客户端未初始化，跳过心跳")
+                    continue
+
+                if not self.user_client.is_connected():
+                    self._telethon_heartbeat_fail_count += 1
+                    logger.warning(f"💔 Telethon 心跳失败 ({self._telethon_heartbeat_fail_count}/3): 客户端未连接")
+                    
+                    if self._telethon_heartbeat_fail_count >= 3:
+                        logger.error("🚨 Telethon 连续3次心跳失败，触发自动重连")
+                        await self._restart_telethon_connection()
+                    continue
+
+                # 发送一个轻量级 API 调用来检测连接状态
+                try:
+                    # 使用 get_me 检测连接是否真的可用
+                    await asyncio.wait_for(
+                        self.user_client.get_me(),
+                        timeout=10.0
+                    )
+                    # 心跳成功
+                    if self._telethon_heartbeat_fail_count > 0:
+                        logger.info(f"💓 Telethon 心跳恢复成功，重置失败计数（之前连续失败 {self._telethon_heartbeat_fail_count} 次）")
+                        self._telethon_heartbeat_fail_count = 0
+                    else:
+                        logger.debug("💓 Telethon 心跳保持连接活跃")
+                except asyncio.TimeoutError:
+                    self._telethon_heartbeat_fail_count += 1
+                    logger.warning(f"💔 Telethon 心跳超时 ({self._telethon_heartbeat_fail_count}/3)")
+                    
+                    if self._telethon_heartbeat_fail_count >= 3:
+                        logger.error("🚨 Telethon 连续3次心跳超时，触发自动重连")
+                        await self._restart_telethon_connection()
+                except Exception as e:
+                    self._telethon_heartbeat_fail_count += 1
+                    logger.warning(f"💔 Telethon 心跳失败 ({self._telethon_heartbeat_fail_count}/3): {e}")
+                    
+                    if self._telethon_heartbeat_fail_count >= 3:
+                        logger.error("🚨 Telethon 连续3次心跳失败，触发自动重连")
+                        await self._restart_telethon_connection()
+
+            except Exception as e:
+                logger.error(f"❌ Telethon 心跳机制异常: {e}")
+                await asyncio.sleep(60)  # 异常时等待1分钟
+
+    async def _restart_telethon_connection(self):
+        """重启 Telethon 客户端连接"""
+        current_time = time.time()
+        
+        # 检查冷却时间
+        time_since_last = current_time - self._telethon_last_reconnect_time
+        if time_since_last < self._telethon_reconnect_cooldown:
+            logger.info(f"⏳ Telethon 重连冷却中，距离上次重连仅 {time_since_last:.1f} 秒，跳过本次请求")
+            self._telethon_heartbeat_fail_count = 0
+            return
+
+        self._telethon_last_reconnect_time = current_time
+        self._telethon_reconnect_count += 1
+
+        logger.warning(f"🔄 开始第 {self._telethon_reconnect_count} 次重启 Telethon 连接")
+
+        try:
+            # 断开旧连接
+            if self.user_client and self.user_client.is_connected():
+                try:
+                    await self.user_client.disconnect()
+                    logger.info("📴 已断开旧 Telethon 连接")
+                except Exception as e:
+                    logger.warning(f"⚠️ 断开旧连接时出错: {e}")
+
+            # 等待一段时间，让资源释放
+            await asyncio.sleep(3)
+
+            # 重新连接
+            if self.user_client:
+                try:
+                    await self.user_client.connect()
+                    logger.info("✅ Telethon 重新连接成功")
+                    
+                    # 验证连接
+                    me = await self.user_client.get_me()
+                    logger.info(f"✅ Telethon 连接验证成功: {me.first_name} (@{me.username})")
+                    
+                    # 重置心跳失败计数
+                    self._telethon_heartbeat_fail_count = 0
+                    logger.info(f"🎉 Telethon 连接重启成功！累计重连次数: {self._telethon_reconnect_count}")
+                except Exception as e:
+                    logger.error(f"❌ Telethon 重新连接失败: {e}")
+                    # 连接失败后不设置 user_client 为 None，保留旧实例供下次重试
+        except Exception as e:
+            logger.error(f"❌ 重启 Telethon 连接失败: {e}")
 
     async def reboot_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """处理 /reboot 命令 - 重启容器"""

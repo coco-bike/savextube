@@ -180,12 +180,25 @@ class MultiThreadDownloader:
             'duration': None,
             'total_bytes': 0,
         }
-        
+
+        # 获取当前事件循环（必须在定义 progress_hook 之前）
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
         # 添加进度钩子
         def progress_hook(d):
+            status = d.get('status', 'unknown')
             info = d.get('info_dict') or {}
+
+            # 提取视频信息（仅在第一次或信息变化时）
             if info:
-                progress_snapshot['title'] = info.get('title') or progress_snapshot['title']
+                new_title = info.get('title')
+                if new_title and new_title != progress_snapshot['title']:
+                    progress_snapshot['title'] = new_title
+                    logger.info(f"🎬 开始下载: {new_title}")
+
                 progress_snapshot['resolution'] = (
                     info.get('resolution')
                     or (f"{info.get('width')}x{info.get('height')}" if info.get('width') and info.get('height') else None)
@@ -200,42 +213,69 @@ class MultiThreadDownloader:
                 progress_snapshot['thumbnail'] = info.get('thumbnail') or progress_snapshot['thumbnail']
                 progress_snapshot['duration'] = info.get('duration') or progress_snapshot['duration']
 
-            if progress_callback:
+            # 构建增强的进度数据
+            enhanced_d = dict(d)
+            enhanced_d['_title'] = progress_snapshot['title']
+            enhanced_d['_resolution'] = progress_snapshot['resolution']
+            enhanced_d['_quality'] = progress_snapshot['quality']
+
+            if status == 'downloading':
+                downloaded = d.get('downloaded_bytes', 0)
+                total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
+                progress_snapshot['total_bytes'] = total or progress_snapshot['total_bytes']
+                speed = d.get('speed', 0) or 0
+                eta = d.get('eta', 0) or 0
+
+                if total > 0:
+                    percent = (downloaded / total) * 100
+                    # 每 5% 或速度变化超过 20% 时记录日志
+                    prev_percent = getattr(progress_hook, '_last_percent', 0)
+                    prev_speed = getattr(progress_hook, '_last_speed', 0)
+
+                    if abs(percent - prev_percent) >= 5 or abs(speed - prev_speed) / max(prev_speed, 1) > 0.2:
+                        logger.info(
+                            f"📥 下载进度: {percent:.1f}% | "
+                            f"已下载: {self._format_size(downloaded)} / {self._format_size(total)} | "
+                            f"速度: {self._format_speed(speed)} | "
+                            f"剩余: {self._format_time(eta)}"
+                        )
+                        progress_hook._last_percent = percent
+                        progress_hook._last_speed = speed
+
+                    # 添加格式化后的进度信息到回调数据
+                    enhanced_d['_percent'] = percent
+                    enhanced_d['_downloaded_str'] = self._format_size(downloaded)
+                    enhanced_d['_total_str'] = self._format_size(total)
+                    enhanced_d['_speed_str'] = self._format_speed(speed)
+                    enhanced_d['_eta_str'] = self._format_time(eta)
+
+            elif status == 'finished':
+                progress_snapshot['final_filename'] = d.get('filename') or progress_snapshot['final_filename']
+                final_size = d.get('total_bytes', 0)
+                logger.info(
+                    f"✅ 下载完成: {progress_snapshot['title'] or '未知'} | "
+                    f"文件: {os.path.basename(d.get('filename', 'unknown'))} | "
+                    f"大小: {self._format_size(final_size)}"
+                )
+
+            # 调用上层回调（传递增强后的数据）
+            if progress_callback and loop:
                 try:
                     if asyncio.iscoroutinefunction(progress_callback):
-                        asyncio.run_coroutine_threadsafe(progress_callback(d), loop)
+                        asyncio.run_coroutine_threadsafe(progress_callback(enhanced_d), loop)
                     else:
-                        callback_result = progress_callback(d)
+                        callback_result = progress_callback(enhanced_d)
                         if asyncio.iscoroutine(callback_result):
                             asyncio.run_coroutine_threadsafe(callback_result, loop)
                 except Exception as callback_error:
                     logger.warning(f"⚠️ 进度回调执行失败: {callback_error}")
-            
-            if d['status'] == 'finished':
-                progress_snapshot['final_filename'] = d.get('filename') or progress_snapshot['final_filename']
-                logger.info(f"✅ 下载完成：{d.get('filename', 'unknown')}")
-            elif d['status'] == 'downloading':
-                downloaded = d.get('downloaded_bytes', 0)
-                total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
-                progress_snapshot['total_bytes'] = total or progress_snapshot['total_bytes']
-                speed = d.get('speed', 0)
-                eta = d.get('eta', 0)
-                
-                if total > 0:
-                    percent = (downloaded / total) * 100
-                    logger.debug(
-                        f"📥 下载进度：{percent:.1f}% | "
-                        f"速度：{self._format_speed(speed)} | "
-                        f"剩余：{eta}s"
-                    )
-        
+
         existing_hooks = ydl_opts.get('progress_hooks', [])
         if not isinstance(existing_hooks, list):
             existing_hooks = [existing_hooks]
         ydl_opts['progress_hooks'] = existing_hooks + [progress_hook]
-        
+
         try:
-            loop = asyncio.get_running_loop()
             
             def download_task():
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -382,16 +422,33 @@ class MultiThreadDownloader:
         """格式化文件大小显示"""
         if size is None or size == 0:
             return "0 B"
-        
+
         units = ['B', 'KB', 'MB', 'GB', 'TB']
         unit_index = 0
         size_value = float(size)
-        
+
         while size_value >= 1024 and unit_index < len(units) - 1:
             size_value /= 1024
             unit_index += 1
-        
+
         return f"{size_value:.2f} {units[unit_index]}"
+
+    @staticmethod
+    def _format_time(seconds: int) -> str:
+        """格式化时间显示（秒转时分秒）"""
+        if seconds is None or seconds <= 0:
+            return "计算中..."
+
+        if seconds < 60:
+            return f"{int(seconds)}秒"
+        elif seconds < 3600:
+            minutes = int(seconds // 60)
+            secs = int(seconds % 60)
+            return f"{minutes}分{secs}秒"
+        else:
+            hours = int(seconds // 3600)
+            minutes = int((seconds % 3600) // 60)
+            return f"{hours}小时{minutes}分"
 
 
 def create_downloader(

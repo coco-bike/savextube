@@ -13,20 +13,6 @@ async def preprocess_download_url(downloader, url: str, message_updater, logger,
         logger.info("检测到 tps:// 协议，自动修正为 https://")
         url = "https://" + url[6:]
 
-    channel_key = downloader._detect_channel_key_from_url(url)
-    if channel_key and not downloader.channel_switches.get(channel_key, True):
-        msg = f"渠道 {channel_key} 当前已在设置中禁用"
-        logger.warning(f"⛔ {msg}")
-        if message_updater:
-            try:
-                if asyncio.iscoroutinefunction(message_updater):
-                    await message_updater(msg)
-                else:
-                    message_updater(msg)
-            except Exception as e:
-                logger.warning(f"发送禁用渠道提示失败: {e}")
-        return {"ok": False, "error": msg, "platform": channel_key}
-
     if downloader.is_weibo_url(url):
         logger.info(f"🔍 检测到微博URL，开始展开短链接: {url}")
         expanded_url = downloader._expand_weibo_short_url(url)

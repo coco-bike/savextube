@@ -66,25 +66,3 @@ mt_aria2c_splits = 16
 # 下载速度限制（0 表示不限制），格式：500K, 1M, 10M
 mt_speed_limit = "0"
 
-[channels]
-# 渠道开关（当 config/channel_switches.json 不存在时作为回退）
-x = true
-youtube = true
-xvideos = true
-pornhub = true
-bilibili = true
-music = true
-telegram = true
-telegraph = true
-douyin = true
-kuaishou = true
-toutiao = true
-facebook = true
-xiaohongshu = true
-weibo = true
-instagram = true
-tiktok = true
-netease = true
-qqmusic = true
-youtubemusic = true
-apple_music = true

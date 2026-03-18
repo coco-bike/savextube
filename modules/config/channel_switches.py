@@ -64,7 +64,7 @@ def load_channel_switches() -> Dict[str, bool]:
         logger.warning(f"读取渠道开关 JSON 失败，将尝试 TOML: {e}")
 
     try:
-        toml_config = load_toml_config("savextube.toml")
+        toml_config = load_toml_config("/app/config/savextube.toml")
         channels = toml_config.get("channels", {}) if isinstance(toml_config, dict) else {}
         switches = _normalize_switches(channels)
     except Exception as e:
