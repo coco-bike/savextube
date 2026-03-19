@@ -253,10 +253,12 @@ class TaskManager:
     
     def complete_task(self, task_id: str, success: bool = True, error: str = ""):
         """完成任务"""
+        task = self.tasks.get(task_id)
+        failed_progress = task.progress if task else 0.0
         self.update_task(
             task_id,
             status=TaskStatus.COMPLETED if success else TaskStatus.FAILED,
-            progress=100.0 if success else task.progress,
+            progress=100.0 if success else failed_progress,
             error=error,
         )
         logger.info(f"任务完成：{task_id} - {'成功' if success else '失败'}")

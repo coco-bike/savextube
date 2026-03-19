@@ -5,6 +5,71 @@ import os
 from typing import Any
 
 
+def _load_multithread_config_from_toml() -> dict:
+    """Best-effort TOML reader for multithread settings."""
+    try:
+        from modules.config.toml_config import load_toml_config
+    except ImportError:
+        return {}
+
+    config_candidates = [
+        os.environ.get("SAVEXTUBE_CONFIG"),
+        "/app/config/savextube.toml",
+        "savextube.toml",
+        "config/savextube.toml",
+        "savextube_full.toml",
+        "config.toml",
+    ]
+
+    for config_path in config_candidates:
+        if not config_path:
+            continue
+        if not os.path.exists(config_path):
+            continue
+        try:
+            config = load_toml_config(config_path)
+        except Exception:
+            continue
+        if isinstance(config, dict) and config.get("multithread"):
+            return config.get("multithread", {})
+    return {}
+
+
+def _get_bool_config(env_name: str, toml_section: dict, toml_key: str, default: bool) -> bool:
+    env_value = os.environ.get(env_name)
+    if env_value is not None:
+        return env_value.strip().lower() in {"1", "true", "yes", "on"}
+
+    toml_value = toml_section.get(toml_key)
+    if toml_value is None:
+        return default
+    if isinstance(toml_value, bool):
+        return toml_value
+    return str(toml_value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _get_int_config(env_name: str, toml_section: dict, toml_key: str, default: int) -> int:
+    env_value = os.environ.get(env_name)
+    if env_value not in (None, ""):
+        return int(env_value)
+
+    toml_value = toml_section.get(toml_key)
+    if toml_value in (None, ""):
+        return default
+    return int(toml_value)
+
+
+def _get_str_config(env_name: str, toml_section: dict, toml_key: str, default: str) -> str:
+    env_value = os.environ.get(env_name)
+    if env_value not in (None, ""):
+        return env_value
+
+    toml_value = toml_section.get(toml_key)
+    if toml_value in (None, ""):
+        return default
+    return str(toml_value)
+
+
 def init_multithread_components(
     downloader,
     *,
@@ -16,14 +81,33 @@ def init_multithread_components(
     """初始化多线程下载器与批量处理器。"""
     if enabled:
         try:
-            mt_threads = int(os.environ.get("MT_FILE_THREADS", "16"))
-            mt_concurrent = int(os.environ.get("MT_CONCURRENT_FILES", "3"))
-            mt_use_aria2c = os.environ.get("MT_USE_ARIA2C", "true").lower() == "true"
+            mt_config = _load_multithread_config_from_toml()
+            mt_threads = _get_int_config("MT_FILE_THREADS", mt_config, "mt_file_threads", 16)
+            mt_concurrent = _get_int_config("MT_CONCURRENT_FILES", mt_config, "mt_concurrent_files", 3)
+            mt_use_aria2c = _get_bool_config("MT_USE_ARIA2C", mt_config, "mt_use_aria2c", True)
+            mt_aria2c_connections = _get_int_config(
+                "MT_ARIA2C_CONNECTIONS", mt_config, "mt_aria2c_connections", 16
+            )
+            mt_aria2c_splits = _get_int_config(
+                "MT_ARIA2C_SPLITS", mt_config, "mt_aria2c_splits", 16
+            )
+            mt_aria2c_min_split_size = _get_str_config(
+                "MT_ARIA2C_MIN_SPLIT_SIZE", mt_config, "mt_aria2c_min_split_size", "1M"
+            )
+            mt_speed_limit = _get_str_config("MT_SPEED_LIMIT", mt_config, "mt_speed_limit", "0")
+            mt_retries = _get_int_config("MT_RETRIES", mt_config, "mt_retries", 5)
+            mt_timeout = _get_int_config("MT_TIMEOUT", mt_config, "mt_timeout", 60)
 
             downloader.multithread_downloader = create_downloader(
                 file_threads=mt_threads,
                 concurrent_files=mt_concurrent,
                 use_aria2c=mt_use_aria2c,
+                aria2c_connections=mt_aria2c_connections,
+                aria2c_splits=mt_aria2c_splits,
+                aria2c_min_split_size=mt_aria2c_min_split_size,
+                speed_limit=mt_speed_limit,
+                retries=mt_retries,
+                timeout=mt_timeout,
             )
             logger.info(f"✅ 多线程下载器初始化成功（线程数：{mt_threads}, 并发数：{mt_concurrent}）")
 

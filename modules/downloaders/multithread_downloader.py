@@ -454,7 +454,13 @@ class MultiThreadDownloader:
 def create_downloader(
     file_threads: int = 16,
     concurrent_files: int = 3,
-    use_aria2c: bool = True
+    use_aria2c: bool = True,
+    aria2c_connections: int = 16,
+    aria2c_splits: int = 16,
+    aria2c_min_split_size: str = "1M",
+    speed_limit: str = "0",
+    retries: int = 5,
+    timeout: int = 60,
 ) -> MultiThreadDownloader:
     """
     创建多线程下载器的便捷函数
@@ -470,6 +476,12 @@ def create_downloader(
     config = DownloadConfig(
         file_threads=file_threads,
         concurrent_files=concurrent_files,
-        use_aria2c=use_aria2c
+        use_aria2c=use_aria2c,
+        aria2c_connections=aria2c_connections,
+        aria2c_splits=aria2c_splits,
+        aria2c_min_split_size=aria2c_min_split_size,
+        speed_limit=speed_limit,
+        retries=retries,
+        timeout=timeout,
     )
     return MultiThreadDownloader(config)

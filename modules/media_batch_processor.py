@@ -1,194 +1,118 @@
 # -*- coding: utf-8 -*-
 """
-媒体批量下载处理器
-支持 Telegram 媒体文件的批量并发下载
+Media queue processor used by main.py.
+
+This module provides `MediaBatchProcessor` so existing imports keep working:
+    from modules.media_batch_processor import MediaBatchProcessor
 """
 
 import asyncio
 import logging
-from datetime import datetime
-from typing import List, Tuple, Any
+from typing import Optional, Tuple
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("savextube.media_batch")
 
 
 class MediaBatchProcessor:
-    """媒体批量下载处理器"""
-    
-    def __init__(self, bot_instance, max_concurrent: int = 3, timeout: float = 5.0):
-        """
-        初始化批量处理器
-        
-        Args:
-            bot_instance: TelegramBot 实例
-            max_concurrent: 最大并发下载数
-            timeout: 队列累积超时时间（秒）
-        """
+    """Queue-based media download processor with bounded concurrency."""
+
+    def __init__(
+        self,
+        bot_instance,
+        max_concurrent: int = 3,
+        timeout: float = 3.0,
+        queue_maxsize: int = 200,
+        download_timeout: float = 1800.0,
+    ):
         self.bot = bot_instance
-        self.queue = asyncio.Queue()
-        self.semaphore = asyncio.Semaphore(max_concurrent)
-        self.timeout = timeout
-        self.processor_task = None
-        self.running = False
-        
-        logger.info(f"✅ 媒体批量处理器初始化成功 | 并发数：{max_concurrent}, 超时：{timeout}s")
-    
+        self.max_concurrent = max(1, int(max_concurrent))
+        self.timeout = float(timeout)
+        self.download_timeout = float(download_timeout)
+
+        self.queue: asyncio.Queue[Tuple] = asyncio.Queue(maxsize=max(1, int(queue_maxsize)))
+        self._semaphore = asyncio.Semaphore(self.max_concurrent)
+        self._processor_task: Optional[asyncio.Task] = None
+        self._running = False
+
+        logger.info(
+            "MediaBatchProcessor initialized | max_concurrent=%s queue_maxsize=%s download_timeout=%ss",
+            self.max_concurrent,
+            self.queue.maxsize,
+            self.download_timeout,
+        )
+
     def start(self):
-        """启动批量处理器"""
-        if not self.running:
-            self.running = True
-            self.processor_task = asyncio.create_task(self._process_queue())
-            logger.info("🚀 媒体批量处理器已启动")
-    
+        if self._running:
+            return
+        self._running = True
+        self._processor_task = asyncio.create_task(self._process_queue())
+        logger.info("MediaBatchProcessor started")
+
     def stop(self):
-        """停止批量处理器"""
-        self.running = False
-        if self.processor_task:
-            self.processor_task.cancel()
-            logger.info("⏹️ 媒体批量处理器已停止")
-    
-    async def add_to_queue(self, update: Update, context: ContextTypes.DEFAULT_TYPE, 
-                          message, status_message, attachment):
-        """
-        添加媒体下载任务到队列
-        
-        Args:
-            update: Telegram Update
-            context: Telegram Context
-            message: 原始消息
-            status_message: 状态消息
-            attachment: 媒体附件
-        """
+        self._running = False
+        if self._processor_task:
+            self._processor_task.cancel()
+            logger.info("MediaBatchProcessor stopped")
+
+    async def add_to_queue(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        message,
+        status_message,
+        attachment,
+    ) -> bool:
         item = (update, context, message, status_message, attachment)
-        await self.queue.put(item)
-        logger.debug(f"📥 媒体任务已加入队列 | 队列长度：{self.queue.qsize()}")
-    
+        try:
+            self.queue.put_nowait(item)
+            return True
+        except asyncio.QueueFull:
+            return False
+
     async def _process_queue(self):
-        """处理队列中的媒体下载任务"""
-        logger.info("🔄 媒体队列处理器运行中...")
-        
-        while self.running:
+        while self._running:
             try:
-                # 累积一批任务
-                batch = await self._collect_batch()
-                
-                if batch:
-                    logger.info(f"📦 开始处理批次 | 数量：{len(batch)}")
-                    
-                    if len(batch) == 1:
-                        # 单个任务，直接处理
-                        await self._process_single(batch[0])
-                    else:
-                        # 多个任务，并发处理
-                        await self._process_batch(batch)
-                
+                item = await asyncio.wait_for(self.queue.get(), timeout=self.timeout)
+            except asyncio.TimeoutError:
+                continue
             except asyncio.CancelledError:
-                logger.info("⏹️ 队列处理器已取消")
                 break
             except Exception as e:
-                logger.error(f"❌ 队列处理错误：{e}", exc_info=True)
-                await asyncio.sleep(1)
-    
-    async def _collect_batch(self) -> List[Tuple]:
-        """从队列中收集一批任务"""
-        batch = []
-        
-        try:
-            # 获取第一个任务
-            first = await asyncio.wait_for(self.queue.get(), timeout=self.timeout)
-            batch.append(first)
-            
-            # 收集更多任务（短时间窗口内）
-            while True:
-                try:
-                    item = await asyncio.wait_for(self.queue.get(), timeout=0.3)
-                    batch.append(item)
-                    if len(batch) >= 10:  # 最多累积 10 个
-                        break
-                except asyncio.TimeoutError:
-                    break
-        except asyncio.TimeoutError:
-            pass
-        
-        return batch
-    
-    async def _process_batch(self, batch: List[Tuple]):
-        """并发处理一批任务"""
-        total = len(batch)
-        logger.info(f"🚀 开始并发下载 {total} 个媒体文件")
-        
-        # 创建并发任务
-        tasks = []
-        for i, item in enumerate(batch):
-            update, context, message, status_message, attachment = item
-            task = asyncio.create_task(
-                self._download_with_semaphore(update, context, message, status_message, attachment, i + 1, total)
-            )
-            tasks.append(task)
-        
-        # 等待所有任务完成
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        # 统计结果
-        success = sum(1 for r in results if r is True)
-        failed = total - success
-        
-        logger.info(f"✅ 批次完成 | 成功：{success}/{total}, 失败：{failed}")
-    
-    async def _download_with_semaphore(self, update, context, message, status_message, attachment, index, total):
-        """带信号量控制的下载"""
-        async with self.semaphore:
+                logger.error("Queue receive failed: %s", e, exc_info=True)
+                await asyncio.sleep(0.5)
+                continue
+
+            asyncio.create_task(self._run_one(item))
+
+    async def _run_one(self, item: Tuple):
+        update, context, _message, status_message, _attachment = item
+        async with self._semaphore:
             try:
-                file_name = getattr(attachment, 'file_name', 'unknown_file')
-                file_size = getattr(attachment, 'file_size', 0)
-                total_mb = file_size / (1024 * 1024) if file_size else 0
-                
-                logger.info(f"📥 [{index}/{total}] 开始下载：{file_name} ({total_mb:.2f} MB)")
-                
-                # 更新进度 - 显示详细信息
-                try:
-                    await status_message.edit_text(
-                        f"📦 **批量下载进度** ({index}/{total})\n\n"
-                        f"📥 正在下载：{file_name}\n"
-                        f"📊 文件大小：{total_mb:.2f} MB\n"
-                        f"⏳ 并发限制：最多同时下载 {self.semaphore._value} 个文件\n"
-                        f"⏱️ 开始时间：{datetime.now().strftime('%H:%M:%S')}"
-                    )
-                except Exception as e:
-                    logger.warning(f"更新进度失败：{e}")
-                
-                # 执行实际下载（会显示详细进度）
-                await self._execute_download(update, context, message, status_message, attachment)
-                
-                return True
-                
+                await asyncio.wait_for(
+                    self.bot.download_user_media(
+                        update,
+                        context,
+                        from_queue=True,
+                        status_message=status_message,
+                    ),
+                    timeout=self.download_timeout,
+                )
+            except asyncio.TimeoutError:
+                logger.error("Media download timed out after %ss", self.download_timeout)
+                if status_message:
+                    try:
+                        await status_message.edit_text(
+                            f"❌ 下载超时（>{int(self.download_timeout)}s），任务已终止。"
+                        )
+                    except Exception:
+                        pass
             except Exception as e:
-                logger.error(f"❌ [{index}] 下载失败：{e}")
-                return False
-    
-    async def _process_single(self, item: Tuple):
-        """处理单个任务"""
-        update, context, message, status_message, attachment = item
-        try:
-            await self._execute_download(update, context, message, status_message, attachment)
-        except Exception as e:
-            logger.error(f"❌ 单个任务下载失败：{e}")
-    
-    async def _execute_download(self, update, context, message, status_message, attachment):
-        """
-        执行实际下载（直接调用完整的 download_user_media）
-        这样可以保留原有的详细进度显示和元数据信息
-        """
-        try:
-            # 直接调用完整的 download_user_media 函数
-            # 这样会显示详细的下载进度、文件信息、分辨率等
-            await self.bot.download_user_media(update, context)
-        except Exception as e:
-            logger.error(f"❌ 执行下载失败：{e}", exc_info=True)
-            try:
-                await status_message.edit_text(f"❌ 下载失败：{str(e)}")
-            except:
-                pass
-            raise
+                logger.error("Media download worker failed: %s", e, exc_info=True)
+                if status_message:
+                    try:
+                        await status_message.edit_text(f"❌ 下载失败：{e}")
+                    except Exception:
+                        pass

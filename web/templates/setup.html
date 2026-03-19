@@ -172,9 +172,6 @@
       <div class="sidebar">
         <div class="logo">🎵 SaveXTube</div>
         <div class="menu">
-          <div class="menu-item" @click="goTo('/dashboard')">
-            <span>📊</span> 仪表盘
-          </div>
           <div class="menu-item" @click="goTo('/tasks')">
             <span>📥</span> 下载任务
           </div>
@@ -420,8 +417,8 @@
               </ul>
             </div>
             <div class="action-area">
-              <el-button type="primary" @click="goTo('/dashboard')">
-                前往仪表盘
+              <el-button type="primary" @click="goTo('/tasks')">
+                前往下载任务
               </el-button>
               <el-button @click="currentStep = 1"> 重新开始 </el-button>
             </div>

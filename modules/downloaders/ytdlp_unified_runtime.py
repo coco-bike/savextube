@@ -71,6 +71,10 @@ async def download_with_ytdlp_unified_runtime(
                 logger.info(f"🍪 使用cookies: {cookies_path}")
 
             # 进度数据存储
+            multithread_downloader = getattr(downloader, "multithread_downloader", None)
+            if multithread_downloader and hasattr(multithread_downloader, "get_yt_dlp_options"):
+                ydl_opts = multithread_downloader.get_yt_dlp_options(ydl_opts)
+
             progress_data = {"final_filename": None, "lock": threading.Lock()}
 
             # 使用统一的单集下载进度回调

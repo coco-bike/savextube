@@ -20,6 +20,7 @@ import logging
 logger = logging.getLogger("savextube.bootstrap")
 logging.getLogger("telethon").setLevel(logging.WARNING)
 from pathlib import Path
+from datetime import datetime
 from urllib.parse import urlparse
 from typing import Optional, Dict, Any
 from enum import Enum
@@ -384,7 +385,7 @@ except ImportError:
 
 
 # 程序版本信息
-BOT_VERSION = "v0.4"
+BOT_VERSION = "v1.1"
 
 # 创建 Flask 应用（仅用于 Telegram 会话生成）
 app = Flask(__name__, static_folder="web", static_url_path="/web")
@@ -399,12 +400,12 @@ try:
 except Exception as _e:
     logging.getLogger(__name__).warning(f"⚠️ 注册 /setup 失败: {_e}")
 
-# 注册 Web UI 蓝图（登录、仪表盘、任务等页面）
+# 注册 Web UI 蓝图（登录、任务等页面）
 try:
     from web.flask_web_ui import create_web_ui_blueprint as _ui_create_bp
     _ui_static_dir = os.path.join(os.path.dirname(__file__), "web", "templates")
     app.register_blueprint(_ui_create_bp(static_dir=_ui_static_dir))
-    logging.getLogger(__name__).info(f"✅ Web UI 已注册（登录、仪表盘、任务），路径: {_ui_static_dir}")
+    logging.getLogger(__name__).info(f"✅ Web UI 已注册（登录、任务），路径: {_ui_static_dir}")
 except Exception as _e:
     logging.getLogger(__name__).warning(f"⚠️ 注册 Web UI 失败：{_e}")
 
@@ -447,6 +448,9 @@ from modules.url_extractor import URLExtractor
 from modules.batch_downloader import BatchDownloadProcessor
 from modules.message_handler import TelegramMessageHandler
 from modules.media_batch_processor import MediaBatchProcessor
+from modules.task_persistence import TaskPersistStatus, init_persistence
+from modules.task_recovery import init_recovery
+from modules.web_task_manager import get_task_manager, TaskStatus as WebTaskStatus
 from modules.utils.text_utils import (
     clean_filename_for_display as _clean_filename_for_display,
     create_progress_bar as _create_progress_bar,
@@ -4987,7 +4991,16 @@ class TelegramBot:
 
         # 初始化媒体批量下载处理器
         try:
-            self.media_batch_processor = MediaBatchProcessor(self, max_concurrent=3, timeout=3.0)
+            media_max_concurrent = int(os.getenv("MEDIA_MAX_CONCURRENT", "3"))
+            media_queue_maxsize = int(os.getenv("MEDIA_QUEUE_MAXSIZE", "200"))
+            media_download_timeout = float(os.getenv("MEDIA_DOWNLOAD_TIMEOUT", "1800"))
+            self.media_batch_processor = MediaBatchProcessor(
+                self,
+                max_concurrent=media_max_concurrent,
+                timeout=3.0,
+                queue_maxsize=media_queue_maxsize,
+                download_timeout=media_download_timeout,
+            )
             logger.info("✅ 媒体批量下载处理器初始化成功")
         except Exception as e:
             logger.error(f"❌ 媒体批量处理器初始化失败：{e}")
@@ -5009,8 +5022,33 @@ class TelegramBot:
             {}
         )  # 存储下载任务 {task_id: {'task': asyncio.Task, 'cancelled': bool}}
         self.task_lock = asyncio.Lock()  # 用于保护任务字典的锁
+        self.persistence = None
+        self.recovery_manager = None
+        self.error_circuit = None
+        self.web_task_manager = None
         self.user_client: Optional[TelegramClient] = None
         self.main_loop: Optional[asyncio.AbstractEventLoop] = None  # 保存主事件循环
+
+        try:
+            self.persistence = init_persistence("/app/db/tasks.json")
+            self.recovery_manager = init_recovery(self)
+            logger.info("Task persistence initialized")
+        except Exception as e:
+            logger.error(f"Task persistence init failed: {e}")
+
+        try:
+            self.web_task_manager = get_task_manager()
+            logger.info("Web task manager initialized")
+        except Exception as e:
+            logger.warning(f"Web task manager init failed: {e}")
+
+        try:
+            from modules.error_circuit import init_circuit_breaker
+
+            self.error_circuit = init_circuit_breaker("/app/db/circuit_cache.json")
+            logger.info("Error circuit initialized")
+        except Exception as e:
+            logger.warning(f"Error circuit init failed: {e}")
 
         # 新增：B站自动下载全集配置
         self.bilibili_auto_playlist = self.config.get("bilibili_auto_playlist", False)  # 默认关闭自动下载全集
@@ -5527,14 +5565,15 @@ class TelegramBot:
             # 定义命令菜单
             from telegram import BotCommand, BotCommandScopeDefault
             commands = [
-                BotCommand("start", "🏁 开始使用"),
-                BotCommand("help", "📖 查看帮助"),
-                BotCommand("status", "📊 查看下载统计"),
-                BotCommand("cancel", "❌ 取消下载任务"),
-                BotCommand("version", "🔧 查看版本信息"),
-                BotCommand("favsub", "📚 B站收藏夹订阅下载"),
-                BotCommand("cleanup", "🧹 清理临时文件"),
-                BotCommand("reboot", "🔄 重启容器"),
+                BotCommand("start", "开始使用机器人"),
+                BotCommand("help", "显示帮助信息"),
+                BotCommand("status", "查看系统状态"),
+                BotCommand("version", "查看版本"),
+                BotCommand("favsub", "订阅B站收藏夹"),
+                BotCommand("setting", "功能设置"),
+                BotCommand("cleanup", "清理文件"),
+                BotCommand("cancel", "取消下载"),
+                BotCommand("reboot", "重启容器"),
             ]
 
             for i, cmd in enumerate(commands, 1):
@@ -5793,13 +5832,12 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("start", self.start_command))
         self.application.add_handler(CommandHandler("help", self.help_command))
         self.application.add_handler(CommandHandler("version", self.version_command))
-        self.application.add_handler(CommandHandler("reboot", self.reboot_command))
         self.application.add_handler(CommandHandler("status", self.status_command))
-        # self.application.add_handler(CommandHandler("sxt", self.sxt_command))
-        # # 已删除：sxt命令处理器
         self.application.add_handler(CommandHandler("favsub", self.favsub_command))
-        self.application.add_handler(CommandHandler("cancel", self.cancel_command))
+        self.application.add_handler(CommandHandler("setting", self.setting_command))
         self.application.add_handler(CommandHandler("cleanup", self.cleanup_command))
+        self.application.add_handler(CommandHandler("cancel", self.cancel_command))
+        self.application.add_handler(CommandHandler("reboot", self.reboot_command))
         self.application.add_handler(
             CallbackQueryHandler(self.cancel_task_callback, pattern="cancel:")
         )
@@ -5915,12 +5953,21 @@ class TelegramBot:
         if self.downloader.proxy_host:
             logger.info(f"Telegram Bot 使用代理: {self.downloader.proxy_host}")
             self.application = (
-                Application.builder().token(self.token).proxy(self.downloader.proxy_host).post_init(self.post_init).build()
+                Application.builder()
+                .token(self.token)
+                .proxy(self.downloader.proxy_host)
+                .concurrent_updates(8)
+                .post_init(self.post_init)
+                .build()
             )
         else:
             logger.info("Telegram Bot 直接连接")
             self.application = (
-                Application.builder().token(self.token).post_init(self.post_init).build()
+                Application.builder()
+                .token(self.token)
+                .concurrent_updates(8)
+                .post_init(self.post_init)
+                .build()
             )
         self._setup_handlers()
 
@@ -5959,13 +6006,23 @@ class TelegramBot:
                 await self.application.updater.start_polling(
                     timeout=30,  # 增加超时时间
                     error_callback=polling_error_callback,
-                    drop_pending_updates=True  # 丢弃待处理的更新，避免重复处理
+                    drop_pending_updates=False,  # 保留待处理更新，避免网络抖动期间丢任务
+                    allowed_updates=Update.ALL_TYPES,
                 )
 
                 logger.info("机器人已成功启动并正在运行。")
 
                 # 启动 PTB 心跳检测
                 asyncio.create_task(self._keep_alive_heartbeat())
+
+                if self.recovery_manager:
+                    await self.recovery_manager.start()
+                    recovery_result = await self.recovery_manager.resume_pending_tasks()
+                    logger.info(
+                        "Recovered persisted tasks on startup: %s success, %s failed",
+                        recovery_result.get("success_count", 0),
+                        recovery_result.get("fail_count", 0),
+                    )
                 
                 # 启动 Telethon 心跳检测（如果客户端已初始化）
                 if self.user_client:
@@ -6042,13 +6099,31 @@ class TelegramBot:
 
         for attempt in range(max_retries):
             try:
-                # 停止当前的polling
-                if self.application.updater.running:
-                    await self.application.updater.stop()
-                    logger.info("📴 已停止当前polling")
+                # 先尽可能干净地停止当前 polling / application
+                updater = getattr(self.application, "updater", None)
+                if updater and getattr(updater, "running", False):
+                    await updater.stop()
+                    logger.info("📴 已停止当前 polling")
+
+                try:
+                    await self.application.stop()
+                    logger.info("🛑 application.stop() 完成")
+                except Exception as stop_err:
+                    logger.warning(f"⚠️ application.stop() 忽略异常: {stop_err}")
+
+                try:
+                    await self.application.shutdown()
+                    logger.info("🧹 application.shutdown() 完成")
+                except Exception as shutdown_err:
+                    logger.warning(f"⚠️ application.shutdown() 忽略异常: {shutdown_err}")
 
                 # 等待一段时间，让网络资源释放
-                await asyncio.sleep(5)
+                await asyncio.sleep(2)
+
+                # 重新初始化并启动 application（重建 Bot 请求层）
+                await self.application.initialize()
+                await self.application.start()
+                logger.info("✅ application.initialize/start 完成")
 
                 # 重新启动polling（添加错误回调）
                 def polling_error_callback_reconnect(error: Exception):
@@ -6063,8 +6138,12 @@ class TelegramBot:
                 await self.application.updater.start_polling(
                     timeout=30,
                     error_callback=polling_error_callback_reconnect,
-                    drop_pending_updates=True
+                    drop_pending_updates=False,
+                    allowed_updates=Update.ALL_TYPES,
                 )
+                await asyncio.sleep(1)
+                if not self.application.updater.running:
+                    raise RuntimeError("polling 未进入 running 状态")
                 logger.info("✅ 已重新启动polling")
 
                 # 重置心跳失败计数
@@ -6078,6 +6157,7 @@ class TelegramBot:
                     logger.warning(f"⚠️ 重连后设置菜单命令失败（非关键错误）: {menu_error}")
 
                 # 重连成功，跳出循环
+                self._is_reconnecting = False
                 return
 
             except Exception as e:
@@ -6106,6 +6186,13 @@ class TelegramBot:
                 # 发送一个轻量级的API调用来保持连接活跃
                 try:
                     await self.application.bot.get_me()
+                    # 心跳可能已恢复，但 polling 仍处于停止状态；这里兜底拉起。
+                    updater = getattr(self.application, "updater", None)
+                    updater_running = bool(updater and getattr(updater, "running", False))
+                    if not updater_running and not self._is_reconnecting:
+                        logger.warning("⚠️ 心跳已恢复，但 polling 未运行，尝试自动恢复 polling")
+                        await self._restart_bot_connection(reason="heartbeat_ok_but_polling_stopped")
+
                     # 心跳成功，重置失败计数
                     if self._heartbeat_fail_count > 0:
                         logger.info(f"💓 心跳恢复成功，重置失败计数（之前连续失败 {self._heartbeat_fail_count} 次）")
@@ -6447,6 +6534,27 @@ class TelegramBot:
         except Exception as e:
             await update.message.reply_text(f"❌ 获取版本信息失败: {e}")
 
+    async def setting_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """处理 /setting 命令 - 显示功能设置入口"""
+        user_id = update.message.from_user.id
+
+        if not self._check_user_permission(user_id):
+            await update.message.reply_text("❌ 您没有权限使用此机器人")
+            return
+
+        setting_text = (
+            "⚙️ 功能设置\n\n"
+            "当前可通过以下方式进行设置：\n"
+            "1. Web 页面 /setup（推荐）\n"
+            "2. 配置文件（TOML/环境变量）\n\n"
+            "常用命令：\n"
+            "• /status 查看系统状态\n"
+            "• /version 查看版本\n"
+            "• /cleanup 清理文件\n"
+            "• /cancel 取消下载任务"
+        )
+        await update.message.reply_text(setting_text)
+
     async def formats_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """处理 /formats 命令 - 检查视频格式"""
         user_id = update.message.from_user.id
@@ -6648,6 +6756,170 @@ class TelegramBot:
         except Exception as e:
             await update.message.reply_text(f"❌ 获取状态失败: {str(e)}")
 
+    async def cache_status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """处理 /cache_status 命令"""
+        user_id = update.message.from_user.id
+        if not self._check_user_permission(user_id):
+            await update.message.reply_text("❌ 您没有权限使用此机器人")
+            return
+
+        lines = ["🗂️ <b>缓存状态</b>"]
+        try:
+            if self.recovery_manager:
+                summary = await self.recovery_manager.get_all_tasks_summary()
+                lines.extend(
+                    [
+                        "",
+                        "<b>持久化任务</b>",
+                        f"• 活跃任务: {summary.get('total_active', 0)}",
+                        f"• 暂停任务: {summary.get('paused', 0)}",
+                        f"• 可重试错误: {summary.get('error_retryable', 0)}",
+                    ]
+                )
+        except Exception as e:
+            logger.warning(f"获取持久化任务摘要失败: {e}")
+
+        try:
+            circuit = self.error_circuit
+            if circuit is None:
+                from modules.error_circuit import get_circuit_breaker
+
+                circuit = get_circuit_breaker("/app/db/circuit_cache.json")
+            state = circuit.get_circuit_state()
+            lines.extend(
+                [
+                    "",
+                    "<b>熔断缓存</b>",
+                    f"• 状态: {state.get('state', 'unknown')}",
+                    f"• 缓存任务: {len(state.get('cached_tasks', []))}",
+                    f"• 连续错误: {state.get('continuous_errors', 0)}",
+                ]
+            )
+        except Exception as e:
+            logger.warning(f"获取熔断缓存状态失败: {e}")
+
+        await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+    async def clear_cache_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """处理 /clear_cache 命令"""
+        user_id = update.message.from_user.id
+        if not self._check_user_permission(user_id):
+            await update.message.reply_text("❌ 您没有权限使用此机器人")
+            return
+
+        cleared_circuit = 0
+        try:
+            circuit = self.error_circuit
+            if circuit is None:
+                from modules.error_circuit import get_circuit_breaker
+
+                circuit = get_circuit_breaker("/app/db/circuit_cache.json")
+            cleared_circuit = len(circuit.get_cached_tasks())
+            circuit.reset_circuit()
+        except Exception as e:
+            logger.warning(f"清理熔断缓存失败: {e}")
+
+        cleaned_persisted = 0
+        try:
+            if self.persistence:
+                cleaned_persisted = await self.persistence.cleanup_completed(days=0)
+        except Exception as e:
+            logger.warning(f"清理持久化已完成任务失败: {e}")
+
+        await update.message.reply_text(
+            f"✅ 缓存已清理\n"
+            f"• 熔断缓存任务: {cleared_circuit}\n"
+            f"• 持久化已完成任务: {cleaned_persisted}",
+            parse_mode=None,
+        )
+
+    async def resume_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """处理 /resume 命令"""
+        user_id = update.message.from_user.id
+        if not self._check_user_permission(user_id):
+            await update.message.reply_text("❌ 您没有权限使用此机器人")
+            return
+
+        chat_id = update.message.chat_id
+        status_message = await update.message.reply_text("🔄 正在恢复任务，请稍候...")
+
+        recovered_persisted_success = 0
+        recovered_persisted_failed = 0
+        if self.recovery_manager:
+            try:
+                result = await self.recovery_manager.resume_pending_tasks()
+                recovered_persisted_success = result.get("success_count", 0)
+                recovered_persisted_failed = result.get("fail_count", 0)
+            except Exception as e:
+                logger.error(f"恢复持久化任务失败: {e}")
+
+        recovered_circuit = 0
+        failed_circuit = 0
+        try:
+            circuit = self.error_circuit
+            if circuit is None:
+                from modules.error_circuit import get_circuit_breaker
+
+                circuit = get_circuit_breaker("/app/db/circuit_cache.json")
+
+            cached_tasks = circuit.get_cached_tasks()
+            if cached_tasks:
+                circuit.confirm_recovery()
+
+            for cached in cached_tasks:
+                try:
+                    recovery_notice = await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=f"🔄 恢复缓存任务: {cached.title[:60]}",
+                        parse_mode=None,
+                    )
+
+                    class _RecoveryContext:
+                        def __init__(self, bot):
+                            self.bot = bot
+
+                    class _RecoveryMessage:
+                        def __init__(self, recovery_chat_id):
+                            self.chat_id = recovery_chat_id
+
+                        async def reply_text(self, *args, **kwargs):
+                            return None
+
+                    class _RecoveryUpdate:
+                        def __init__(self, recovery_user_id, recovery_chat_id):
+                            self.effective_user = type("RecoveryUser", (), {"id": recovery_user_id})()
+                            self.message = _RecoveryMessage(recovery_chat_id)
+
+                    recovery_update = _RecoveryUpdate(user_id, chat_id)
+                    recovery_context = _RecoveryContext(context.bot)
+                    asyncio.create_task(
+                        self._process_download_async(
+                            recovery_update,
+                            recovery_context,
+                            cached.url,
+                            recovery_notice,
+                            persisted_task_id=None,
+                        )
+                    )
+                    recovered_circuit += 1
+                except Exception as e:
+                    logger.error(f"恢复熔断缓存任务失败 {cached.task_id}: {e}")
+                    failed_circuit += 1
+
+            if cached_tasks:
+                circuit.reset_circuit()
+        except Exception as e:
+            logger.warning(f"处理熔断缓存恢复失败: {e}")
+
+        await status_message.edit_text(
+            "✅ 恢复命令已执行\n"
+            f"• 持久化恢复成功: {recovered_persisted_success}\n"
+            f"• 持久化恢复失败: {recovered_persisted_failed}\n"
+            f"• 熔断缓存恢复成功: {recovered_circuit}\n"
+            f"• 熔断缓存恢复失败: {failed_circuit}",
+            parse_mode=None,
+        )
+
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """处理文本消息，支持批量链接（委托给消息处理器）"""
         if hasattr(self, 'message_handler') and self.message_handler:
@@ -6783,10 +7055,17 @@ class TelegramBot:
 
         # 立即发送快速响应
         status_message = await message.reply_text("🚀 正在处理您的请求...")
+        persisted_task_id = await self._create_persisted_url_task(update, url)
 
         # 异步处理下载任务，不阻塞响应
         asyncio.create_task(
-            self._process_download_async(update, context, url, status_message)
+            self._process_download_async(
+                update,
+                context,
+                url,
+                status_message,
+                persisted_task_id=persisted_task_id,
+            )
         )
 
     async def _handle_search_command(self, message, context):
@@ -7156,16 +7435,30 @@ class TelegramBot:
         context: ContextTypes.DEFAULT_TYPE,
         url: str,
         status_message,
+        persisted_task_id: str = None,
     ):
         """异步处理下载任务"""
         import os  # 导入os模块以解决作用域问题
 
         # 在方法开始时定义chat_id，确保在所有异常处理路径中都可访问
         chat_id = status_message.chat_id
+        effective_user = getattr(update, "effective_user", None)
+        effective_user_id = getattr(effective_user, "id", 0)
+
+        if persisted_task_id:
+            await self._update_persisted_task_status(
+                persisted_task_id,
+                TaskPersistStatus.DOWNLOADING,
+            )
 
         try:
             # 首先尝试处理qBittorrent相关链接
             if await self.handle_qbittorrent_links(update, context, url, status_message):
+                await self._update_persisted_task_status(
+                    persisted_task_id,
+                    TaskPersistStatus.COMPLETED,
+                )
+                self._finalize_web_task(task_id, success=True)
                 return  # 如果是qB相关链接，处理完就返回
 
             # 检查是否为B站自定义列表URL
@@ -7175,12 +7468,22 @@ class TelegramBot:
             # 链接有效性检查
             platform_name = self.downloader.get_platform_name(url)
             if platform_name == "未知":
+                await self._update_persisted_task_status(
+                    persisted_task_id,
+                    TaskPersistStatus.ERROR,
+                    "Unsupported platform",
+                )
                 await status_message.edit_text("🙁 抱歉，暂不支持您发送的网站。", parse_mode=None)
                 return
 
             # 获取平台信息用于后续判断
             platform = platform_name.lower()
         except Exception as e:
+            await self._update_persisted_task_status(
+                persisted_task_id,
+                TaskPersistStatus.ERROR,
+                str(e),
+            )
             logger.error(f"处理下载时发生意外错误: {e}", exc_info=True)
             await context.bot.edit_message_text(
                 text=f"❌ 处理下载时发生内部错误：\n{str(e)}",
@@ -7313,7 +7616,15 @@ class TelegramBot:
         loop = asyncio.get_running_loop()
 
         # 生成任务ID
-        task_id = f"{update.effective_user.id}_{int(time.time())}"
+        task_id = persisted_task_id or f"{effective_user_id}_{int(time.time())}"
+        self._ensure_web_task(
+            task_id=task_id,
+            title=url,
+            url=url,
+            source="telegram",
+            channel=str(chat_id),
+            message_id=getattr(status_message, "message_id", None),
+        )
 
         # 添加 progress_data 支持（参考 main.v0.3.py）
         progress_data = {
@@ -7363,6 +7674,8 @@ class TelegramBot:
             if not isinstance(d, dict):
                 logger.warning(f"update_progress接收到非字典类型参数: {type(d)}, 内容: {d}")
                 return
+
+            self._update_web_task_from_progress(task_id, d)
 
             # 更新 progress_data（参考 main.v0.3.py）
             try:
@@ -7632,17 +7945,33 @@ class TelegramBot:
             )
 
         # 添加到任务管理器
-        await self.add_download_task(task_id, download_task, update.effective_user.id, status_message)
+        await self.add_download_task(task_id, download_task, effective_user_id, status_message)
 
         try:
             # 等待下载完成
             result = await download_task
         except asyncio.CancelledError:
             logger.info(f"🚫 下载任务被取消: {task_id}")
+            await self._update_persisted_task_status(
+                persisted_task_id,
+                TaskPersistStatus.CANCELLED,
+                "Cancelled by user",
+            )
+            if self.web_task_manager:
+                try:
+                    self.web_task_manager.cancel_task(task_id)
+                except Exception:
+                    pass
             await status_message.edit_text("🚫 下载任务已取消", parse_mode=None)
             return
         except Exception as e:
             logger.error(f"❌ 下载任务执行异常: {e}")
+            await self._update_persisted_task_status(
+                persisted_task_id,
+                TaskPersistStatus.ERROR,
+                str(e),
+            )
+            self._finalize_web_task(task_id, success=False, error=str(e))
             await status_message.edit_text(f"❌ 下载失败: {str(e)}")
             return
         finally:
@@ -7655,11 +7984,22 @@ class TelegramBot:
         # 检查result是否为None
         if not result:
             logger.error("❌ 下载任务返回None结果")
+            await self._update_persisted_task_status(
+                persisted_task_id,
+                TaskPersistStatus.ERROR,
+                "Download task returned no result",
+            )
+            self._finalize_web_task(task_id, success=False, error="Download task returned no result")
             await status_message.edit_text("❌ 下载失败: 未知错误", parse_mode=None)
             return
 
         # 兼容不同的返回格式：有些返回"success"，有些返回"status"
         if result.get("success") or result.get("status") == "success":
+            await self._update_persisted_task_status(
+                persisted_task_id,
+                TaskPersistStatus.COMPLETED,
+            )
+            self._finalize_web_task(task_id, success=True)
             # 添加调试日志
             logger.info(f"下载完成，结果: {result}")
             logger.info(f"is_playlist: {result.get('is_playlist')}")
@@ -7680,7 +8020,10 @@ class TelegramBot:
                 (result.get("video_type") == "user_all_videos" and "bilibili" in platform_value.lower()) or
                 (result.get("is_playlist") and platform_value.lower() == "bilibili") or
                 (result.get("is_playlist") and "bilibili" in str(result).lower()) or
-                (result.get("download_path", "").startswith("/downloads/Bilibili") and result.get("is_playlist"))
+                (
+                    result.get("download_path", "").startswith(str(self.downloader.bilibili_download_path))
+                    and result.get("is_playlist")
+                )
             )
 
             # 检查是否为B站UP主所有视频下载（类似YouTube频道）
@@ -9788,6 +10131,12 @@ class TelegramBot:
                 error_msg = "下载任务返回空结果"
 
             try:
+                await self._update_persisted_task_status(
+                    persisted_task_id,
+                    TaskPersistStatus.ERROR,
+                    error_msg,
+                )
+                self._finalize_web_task(task_id, success=False, error=error_msg)
                 await status_message.edit_text(
                     f"❌ 下载失败: `{(error_msg)}`",
                     parse_mode=None,
@@ -9803,6 +10152,7 @@ class TelegramBot:
 
         # 权限检查
         if not self._check_user_permission(user_id):
+            logger.warning("⛔ start_command denied by permission | user_id=%s", user_id)
             await update.message.reply_text("❌ 您没有权限使用此机器人")
             return
 
@@ -9843,14 +10193,16 @@ class TelegramBot:
             "4. 支持媒体文件转发和处理\n\n"
 
             "⚙️ <b>可用命令：</b>\n"
-            "• <b>/start</b> - 🏁 显示欢迎信息\n"
-            "• <b>/help</b> - 📖 显示此帮助信息\n"
-            "• <b>/status</b> - 📊 查看下载统计和系统状态\n"
-            "• <b>/version</b> - 🔧 查看版本信息\n"
-            "• <b>/favsub</b> - 📚 B站收藏夹订阅管理\n"
-            "• <b>/cancel</b> - ❌ 取消当前下载任务\n"
-            "• <b>/cleanup</b> - 🧹 清理重复文件\n"
-            "• <b>/reboot</b> - 🔄 重启机器人（管理员）\n\n"
+            "• <b>/start</b> - 开始使用机器人\n"
+            "• <b>/help</b> - 显示帮助信息\n"
+            "• <b>/status</b> - 查看系统状态\n"
+            "• <b>/version</b> - 查看版本\n"
+            "• <b>/favsub</b> - 订阅B站收藏夹\n"
+            "• <b>/setting</b> - 功能设置\n"
+            "• <b>/cleanup</b> - 清理文件\n"
+            "• <b>/cancel</b> - 取消下载\n"
+            "• <b>/reboot</b> - 重启容器\n"
+            "\n"
 
             "✨ <b>核心特性：</b>\n"
             "• 🔄 实时下载进度显示\n"
@@ -9961,6 +10313,272 @@ class TelegramBot:
             return self.download_tasks[task_id]["cancelled"]
         return False
 
+    async def _create_persisted_url_task(self, update: Update, url: str) -> str | None:
+        """Persist a URL download request before it is processed in the background."""
+        if not self.persistence:
+            return None
+
+        try:
+            task_id = f"url_{uuid.uuid4().hex[:12]}"
+            user = getattr(update, "effective_user", None)
+            message = getattr(update, "message", None)
+            await self.persistence.create_task(
+                task_id=task_id,
+                url=url,
+                title=url[:120],
+                source="telegram",
+                chat_id=getattr(message, "chat_id", None),
+                message_id=getattr(message, "message_id", None),
+                user_id=getattr(user, "id", None),
+                context={"kind": "url", "url": url},
+            )
+            return task_id
+        except Exception as e:
+            logger.error(f"Failed to persist URL task: {e}")
+            return None
+
+    async def _create_persisted_media_task(
+        self,
+        update: Update,
+        attachment,
+        file_name: str,
+    ) -> str | None:
+        """Persist a Telegram media download request before processing."""
+        if not self.persistence:
+            return None
+
+        try:
+            message = getattr(update, "message", None)
+            user = getattr(update, "effective_user", None)
+            task_id = f"media_{uuid.uuid4().hex[:12]}"
+            file_size = getattr(attachment, "file_size", 0)
+            file_unique_id = getattr(attachment, "file_unique_id", "")
+            file_id = getattr(attachment, "file_id", "")
+            message_date = getattr(message, "date", None)
+            message_text = getattr(message, "text", "")
+
+            await self.persistence.create_task(
+                task_id=task_id,
+                url=f"tg-media://{file_unique_id or task_id}",
+                title=(file_name or "telegram_media")[:120],
+                source="telegram",
+                chat_id=getattr(message, "chat_id", None),
+                message_id=getattr(message, "message_id", None),
+                user_id=getattr(user, "id", None),
+                context={
+                    "kind": "media",
+                    "file_name": file_name or "",
+                    "file_size": int(file_size or 0),
+                    "file_unique_id": file_unique_id or "",
+                    "file_id": file_id or "",
+                    "message_text": message_text or "",
+                    "bot_message_time": message_date.isoformat() if message_date else "",
+                },
+            )
+            return task_id
+        except Exception as e:
+            logger.error(f"Failed to persist media task: {e}")
+            return None
+
+    async def _update_persisted_task_status(
+        self,
+        task_id: str | None,
+        status: TaskPersistStatus,
+        error_message: str = "",
+    ) -> None:
+        """Safely update a persisted task status."""
+        if not self.persistence or not task_id:
+            return
+        try:
+            await self.persistence.update_status(task_id, status, error_message)
+        except Exception as e:
+            logger.error(f"Failed to update persisted task {task_id}: {e}")
+
+    def _ensure_web_task(
+        self,
+        task_id: str,
+        title: str,
+        url: str,
+        source: str = "telegram",
+        channel: str = "",
+        message_id: int | None = None,
+    ) -> None:
+        """Create web task entry if missing."""
+        if not self.web_task_manager or not task_id:
+            return
+        try:
+            if self.web_task_manager.get_task(task_id):
+                return
+            self.web_task_manager.create_task(
+                task_id=task_id,
+                title=(title or url or task_id)[:120],
+                url=url or "",
+                task_type="single",
+                source=source,
+                channel=channel,
+                message_id=message_id,
+            )
+        except Exception as e:
+            logger.debug(f"Create web task failed: {e}")
+
+    def _update_web_task_from_progress(self, task_id: str, progress_payload: dict) -> None:
+        """Mirror downloader progress to web task manager."""
+        if not self.web_task_manager or not task_id or not isinstance(progress_payload, dict):
+            return
+        try:
+            status = progress_payload.get("status", "")
+            if status == "downloading":
+                downloaded = progress_payload.get("downloaded_bytes", 0) or 0
+                total = progress_payload.get("total_bytes") or progress_payload.get("total_bytes_estimate", 0) or 0
+                speed = progress_payload.get("speed", 0) or 0
+                eta = progress_payload.get("eta", 0) or 0
+                progress = (downloaded / total * 100.0) if total > 0 else 0.0
+                filename = os.path.basename(progress_payload.get("filename", "") or "")
+                self.web_task_manager.update_task(
+                    task_id,
+                    status=WebTaskStatus.DOWNLOADING,
+                    progress=progress,
+                    downloaded_bytes=downloaded,
+                    total_bytes=total,
+                    speed=speed,
+                    eta=eta,
+                    filename=filename,
+                )
+            elif status == "finished":
+                filename = os.path.basename(progress_payload.get("filename", "") or "")
+                self.web_task_manager.update_task(
+                    task_id,
+                    status=WebTaskStatus.PROCESSING,
+                    progress=100.0,
+                    filename=filename,
+                )
+            elif status == "error":
+                self.web_task_manager.complete_task(
+                    task_id,
+                    success=False,
+                    error=progress_payload.get("error", "unknown error"),
+                )
+        except Exception as e:
+            logger.debug(f"Update web task progress failed: {e}")
+
+    def _finalize_web_task(self, task_id: str, success: bool, error: str = "") -> None:
+        """Finalize web task status."""
+        if not self.web_task_manager or not task_id:
+            return
+        try:
+            self.web_task_manager.complete_task(task_id, success=success, error=error)
+        except Exception as e:
+            logger.debug(f"Finalize web task failed: {e}")
+
+    async def resume_persisted_task(self, task, notify: bool = True) -> bool:
+        """Requeue a persisted Telegram task."""
+        if not self.application or not getattr(self.application, "bot", None):
+            logger.warning("Application bot is not ready, cannot resume persisted task")
+            return False
+
+        task_context = getattr(task, "context", {}) or {}
+        task_kind = task_context.get("kind")
+        chat_id = getattr(task, "chat_id", None)
+        user_id = getattr(task, "user_id", None) or 0
+        if not chat_id:
+            logger.warning(f"Persisted task missing chat_id: {getattr(task, 'task_id', 'unknown')}")
+            return False
+
+        try:
+            status_message = await self.application.bot.send_message(
+                chat_id=chat_id,
+                text="🔄 正在恢复未完成的下载任务...",
+                parse_mode=None,
+            )
+
+            class _RecoveryContext:
+                def __init__(self, bot):
+                    self.bot = bot
+
+            if task_kind == "url":
+                url = task_context.get("url") or getattr(task, "url", "")
+                if not url:
+                    logger.warning(f"Persisted URL task missing url: {getattr(task, 'task_id', 'unknown')}")
+                    return False
+
+                class _RecoveryMessage:
+                    def __init__(self, recovery_chat_id):
+                        self.chat_id = recovery_chat_id
+
+                    async def reply_text(self, *args, **kwargs):
+                        return None
+
+                class _RecoveryUpdate:
+                    def __init__(self, recovery_user_id, recovery_chat_id):
+                        self.effective_user = type("RecoveryUser", (), {"id": recovery_user_id})()
+                        self.message = _RecoveryMessage(recovery_chat_id)
+
+                recovery_update = _RecoveryUpdate(user_id, chat_id)
+                recovery_context = _RecoveryContext(self.application.bot)
+                asyncio.create_task(
+                    self._process_download_async(
+                        recovery_update,
+                        recovery_context,
+                        url,
+                        status_message,
+                        persisted_task_id=getattr(task, "task_id", None),
+                    )
+                )
+                return True
+
+            if task_kind == "media":
+                file_name = task_context.get("file_name", "")
+                file_size = int(task_context.get("file_size", 0) or 0)
+                file_unique_id = task_context.get("file_unique_id", "")
+                file_id = task_context.get("file_id", "")
+                message_text = task_context.get("message_text", "")
+                bot_message_time = task_context.get("bot_message_time", "")
+
+                class _RecoveryAttachment:
+                    def __init__(self):
+                        self.file_name = file_name
+                        self.file_size = file_size
+                        self.file_unique_id = file_unique_id
+                        self.file_id = file_id
+
+                class _RecoveryMessage:
+                    def __init__(self, recovery_chat_id):
+                        self.chat_id = recovery_chat_id
+                        self.text = message_text
+                        try:
+                            self.date = datetime.fromisoformat(bot_message_time) if bot_message_time else datetime.now()
+                        except Exception:
+                            self.date = datetime.now()
+                        self.effective_attachment = _RecoveryAttachment()
+                        self.from_user = type("RecoveryUser", (), {"id": user_id})()
+
+                    async def reply_text(self, text, **kwargs):
+                        return await self._bot.send_message(chat_id=self.chat_id, text=text, **kwargs)
+
+                class _RecoveryUpdate:
+                    def __init__(self, recovery_user_id, recovery_chat_id, bot):
+                        self.effective_user = type("RecoveryUser", (), {"id": recovery_user_id})()
+                        msg = _RecoveryMessage(recovery_chat_id)
+                        msg._bot = bot
+                        self.message = msg
+
+                recovery_update = _RecoveryUpdate(user_id, chat_id, self.application.bot)
+                recovery_context = _RecoveryContext(self.application.bot)
+                asyncio.create_task(
+                    self.download_user_media(
+                        recovery_update,
+                        recovery_context,
+                        persisted_task_id=getattr(task, "task_id", None),
+                    )
+                )
+                return True
+
+            logger.info(f"Skip unsupported persisted task kind: {task_kind}")
+            return False
+        except Exception as e:
+            logger.error(f"Failed to resume persisted task {getattr(task, 'task_id', 'unknown')}: {e}")
+            return False
+
 
     async def _process_telethon_media_download(self, update, context, message, status_message, attachment):
         """
@@ -10043,9 +10661,11 @@ class TelegramBot:
                 return
             
             # 下载文件
+            telegram_base = str(self.downloader.telegram_download_path)
+            os.makedirs(telegram_base, exist_ok=True)
             download_path = await self.user_client.download_media(
                 media_message,
-                file='/downloads/telegram/'
+                file=telegram_base,
             )
             
             logger.info(f"✅ 下载完成：{download_path}")
@@ -10056,15 +10676,25 @@ class TelegramBot:
             await status_message.edit_text(f"❌ 下载失败：{str(e)}")
             raise
 
-    async def download_user_media(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def download_user_media(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        persisted_task_id: str | None = None,
+        from_queue: bool = False,
+        status_message=None,
+    ):
         """
         通过 Telethon 处理用户发送或转发的媒体文件，以支持大文件下载。
         """
         import re
         user_id = update.message.from_user.id
+        chat_id = update.message.chat_id
+        persisted_media_task_id = persisted_task_id
 
         # 权限检查
         if not self._check_user_permission(user_id):
+            logger.warning("⛔ download_user_media denied by permission | user_id=%s", user_id)
             await update.message.reply_text("❌ 您没有权限使用此机器人")
             return
 
@@ -10072,37 +10702,52 @@ class TelegramBot:
         chat_id = message.chat_id
 
         if not self.user_client:
+            await self._update_persisted_task_status(
+                persisted_media_task_id,
+                TaskPersistStatus.ERROR,
+                "Telethon client unavailable",
+            )
             await message.reply_text("❌ 媒体下载功能未启用（Telethon 未配置），请联系管理员。")
             return
         
-        # 临时禁用批量处理器，使用直接处理模式以保留详细进度显示
-        # 批量处理器的进度显示需要优化，暂时使用原有逻辑
-        if False and self.media_batch_processor:
+        # 媒体队列模式：入口先入队，由队列按并发上限处理
+        # from_queue=True 时表示已在队列 worker 中，避免重复入队。
+        if (not from_queue) and self.media_batch_processor:
             # 使用批量队列处理
             status_message = await message.reply_text("📥 已加入下载队列，请稍候...")
-            await self.media_batch_processor.add_to_queue(
+            queued = await self.media_batch_processor.add_to_queue(
                 update, context, message, status_message, message.effective_attachment
             )
-            logger.info(f"📥 媒体文件已加入批量队列 | 队列长度：{self.media_batch_processor.queue.qsize()}")
+            if queued:
+                logger.info(f"📥 媒体文件已加入批量队列 | 队列长度：{self.media_batch_processor.queue.qsize()}")
+            else:
+                logger.warning("⚠️ 媒体文件入队失败：队列已满")
             return
-        else:
-            # 直接处理（保留详细进度显示）
-            pass
 
         # --- 紧急修复: 确保 self.bot_id 已设置 ---
         if not self.bot_id:
             try:
                 logger.warning("self.bot_id 未设置，正在尝试获取...")
-                bot_info = await context.bot.get_me()
+                bot_info = await asyncio.wait_for(context.bot.get_me(), timeout=15.0)
                 self.bot_id = bot_info.id
                 logger.info(f"成功获取到 bot_id: {self.bot_id}")
             except Exception as e:
                 logger.error(f"紧急获取 bot_id 失败: {e}", exc_info=True)
+                await self._update_persisted_task_status(
+                    persisted_media_task_id,
+                    TaskPersistStatus.ERROR,
+                    f"Failed to get bot_id: {e}",
+                )
                 await message.reply_text(f"❌ 内部初始化错误：无法获取机器人自身ID。请稍后重试。")
                 return
         # 提取媒体信息
         attachment = message.effective_attachment
         if not attachment:
+            await self._update_persisted_task_status(
+                persisted_media_task_id,
+                TaskPersistStatus.ERROR,
+                "No media attachment",
+            )
             await message.reply_text("❓ 请发送或转发一个媒体文件。")
             return
 
@@ -10131,6 +10776,13 @@ class TelegramBot:
                 logger.info(f"从消息文本中提取文件名: {file_name}")
             else:
                 logger.info("Bot API 消息文本为空或只包含空白字符")
+
+        if not persisted_media_task_id:
+            persisted_media_task_id = await self._create_persisted_media_task(
+                update,
+                attachment,
+                file_name,
+            )
 
         # 文件名处理：首行去#，空格变_；正文空格变_；末行全#标签则去#拼接，所有部分用_拼接
         if file_name and file_name != 'unknown_file':
@@ -10170,7 +10822,20 @@ class TelegramBot:
             f"Bot API 收到媒体: name='{file_name}', size={file_size}, "
             f"time={bot_message_timestamp.isoformat()}, unique_id='{file_unique_id}'"
         )
-        status_message = await message.reply_text("正在分析消息，请稍候...")
+        if status_message is None:
+            status_message = await asyncio.wait_for(
+                message.reply_text("正在分析消息，请稍候..."),
+                timeout=20.0,
+            )
+        else:
+            try:
+                await status_message.edit_text("正在分析消息，请稍候...")
+            except Exception:
+                pass
+        await self._update_persisted_task_status(
+            persisted_media_task_id,
+            TaskPersistStatus.DOWNLOADING,
+        )
         try:
             # 在用户客户端（user_client）中查找匹配的消息
             telethon_message = None
@@ -10204,6 +10869,11 @@ class TelegramBot:
                         target_entity = await self.user_client.get_entity("me")
                     except Exception as e3:
                         logger.error(f"所有获取实体的方法都失败了: {e3}")
+                        await self._update_persisted_task_status(
+                            persisted_media_task_id,
+                            TaskPersistStatus.ERROR,
+                            f"Failed to access message history: {e3}",
+                        )
                         await status_message.edit_text(
                             "❌ 无法访问消息历史，可能是Telethon会话问题。请联系管理员。"
                         )
@@ -10361,17 +11031,18 @@ class TelegramBot:
                 is_video_file = True
                 logger.info(f"通过文件扩展名检测到视频文件: {file_name}")
 
+            telegram_base = str(self.downloader.telegram_download_path)
             if is_audio_file:
-                # 音频文件放在telegram/music文件夹
-                download_path = os.path.join(self.downloader.download_path, "telegram", "music")
+                # 音频文件放在 Telegram/music 文件夹
+                download_path = os.path.join(telegram_base, "music")
                 logger.info(f"检测到音频文件，下载路径: {download_path}")
             elif is_video_file:
-                # 视频文件放在telegram/videos文件夹
-                download_path = os.path.join(self.downloader.download_path, "telegram", "videos")
+                # 视频文件放在 Telegram/videos 文件夹
+                download_path = os.path.join(telegram_base, "videos")
                 logger.info(f"检测到视频文件，下载路径: {download_path}")
             else:
-                # 其他文件放在telegram文件夹
-                download_path = os.path.join(self.downloader.download_path, "telegram")
+                # 其他文件放在 Telegram 文件夹
+                download_path = telegram_base
                 logger.info(f"检测到其他媒体文件，下载路径: {download_path}")
 
             os.makedirs(download_path, exist_ok=True)
@@ -10616,8 +11287,17 @@ class TelegramBot:
                             message_id=status_message.message_id,
                                 parse_mode=None
                         )
+                        await self._update_persisted_task_status(
+                            persisted_media_task_id,
+                            TaskPersistStatus.COMPLETED,
+                        )
                         logger.info(f"✅ 媒体文件下载完成: {downloaded_file}")
                     else:
+                        await self._update_persisted_task_status(
+                            persisted_media_task_id,
+                            TaskPersistStatus.ERROR,
+                            "Failed to fetch media file",
+                        )
                         await context.bot.edit_message_text(
                             text="❌ 下载失败：无法获取文件",
                             chat_id=chat_id,
@@ -10627,12 +11307,22 @@ class TelegramBot:
 
                 except Exception as e:
                     logger.error(f"❌ 媒体文件下载失败: {e}", exc_info=True)
+                    await self._update_persisted_task_status(
+                        persisted_media_task_id,
+                        TaskPersistStatus.ERROR,
+                        str(e),
+                    )
                     await context.bot.edit_message_text(
                         text=f"❌ 下载失败: {str(e)}",
                         chat_id=chat_id,
                         message_id=status_message.message_id
                     )
             else:
+                await self._update_persisted_task_status(
+                    persisted_media_task_id,
+                    TaskPersistStatus.ERROR,
+                    "No matched telethon message found",
+                )
                 await context.bot.edit_message_text(
                     text="❌ 无法找到匹配的媒体消息，请重试",
                     chat_id=chat_id,
@@ -10642,6 +11332,11 @@ class TelegramBot:
 
         except Exception as e:
             logger.error(f"❌ 处理媒体消息时出错: {e}", exc_info=True)
+            await self._update_persisted_task_status(
+                persisted_media_task_id,
+                TaskPersistStatus.ERROR,
+                str(e),
+            )
             await context.bot.edit_message_text(
                 text=f"❌ 处理失败: {str(e)}",
                 chat_id=chat_id,

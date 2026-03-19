@@ -1,17 +1,27 @@
 # -*- coding: utf-8 -*-
 """
-Flask Web UI 路由
-提供登录、仪表盘、任务、设置等页面
-简化版 - 使用简单 session，不使用 JWT
+Flask Web UI 路由。
+提供登录、任务页和基础任务 API。
 """
 
 import os
-import json
+import asyncio
 import logging
 import hashlib
+import threading
 from datetime import datetime, timedelta
-from flask import Blueprint, jsonify, request, send_from_directory, make_response, redirect, url_for, session
-from pathlib import Path
+from flask import (
+    Blueprint,
+    jsonify,
+    request,
+    send_from_directory,
+    make_response,
+    redirect,
+    url_for,
+)
+
+from modules.web_task_manager import get_task_manager
+from modules.task_persistence import get_persistence_manager, TaskPersistStatus
 
 logger = logging.getLogger(__name__)
 
@@ -23,107 +33,177 @@ SESSION_EXPIRE_MINUTES = 60 * 24  # 24 小时
 DEFAULT_USERS = {
     "admin": {
         "username": "admin",
-        "password": "savextube",  # 简单明文密码
+        "password": "savextube",
         "disabled": False,
-        "role": "admin"
+        "role": "admin",
     }
 }
 
 # ============ 简单 Session 存储 ============
-# 内存存储 session：{session_id: {"username": xxx, "expires": xxx}}
 _sessions = {}
 
 
 def generate_session_id(username: str) -> str:
-    """生成 session ID"""
+    """生成 session ID。"""
     timestamp = datetime.now().isoformat()
     data = f"{username}:{timestamp}:{SECRET_KEY}"
     return hashlib.sha256(data.encode()).hexdigest()
 
 
 def create_session(username: str) -> str:
-    """创建 session"""
+    """创建 session。"""
     session_id = generate_session_id(username)
     expires = datetime.now() + timedelta(minutes=SESSION_EXPIRE_MINUTES)
-    _sessions[session_id] = {
-        "username": username,
-        "expires": expires.isoformat()
-    }
-    logger.info(f"✅ 创建 session: {username}")
+    _sessions[session_id] = {"username": username, "expires": expires.isoformat()}
+    logger.info("创建 session: %s", username)
     return session_id
 
 
-def get_session(session_id: str) -> dict:
-    """获取 session 信息"""
+def get_session(session_id: str) -> dict | None:
+    """获取 session 信息。"""
     if not session_id or session_id not in _sessions:
         return None
-    
+
     session_data = _sessions[session_id]
     expires = datetime.fromisoformat(session_data["expires"])
-    
-    # 检查是否过期
     if datetime.now() > expires:
         del _sessions[session_id]
         return None
-    
+
     return session_data
 
 
 def remove_session(session_id: str):
-    """删除 session"""
+    """删除 session。"""
     if session_id in _sessions:
         del _sessions[session_id]
 
 
-def verify_password(plain_password: str, stored_password: str) -> bool:
-    """验证密码（简单比较）"""
-    return plain_password == stored_password
-
-
 def get_current_user(session_id: str):
-    """获取当前用户"""
+    """获取当前用户。"""
     session_data = get_session(session_id)
     if not session_data:
         return None
-    
+
     username = session_data.get("username")
     if username and username in DEFAULT_USERS:
         return DEFAULT_USERS[username]
     return None
 
 
+def _run_async(coro):
+    """在 Flask 同步路由里执行异步持久化方法。"""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+
+    result_holder = {"value": None, "error": None}
+
+    def _runner():
+        try:
+            result_holder["value"] = asyncio.run(coro)
+        except Exception as e:  # pragma: no cover
+            result_holder["error"] = e
+
+    t = threading.Thread(target=_runner, daemon=True)
+    t.start()
+    t.join()
+
+    if result_holder["error"] is not None:
+        raise result_holder["error"]
+
+    return result_holder["value"]
+
+
+def _parse_iso_time(value: str | None) -> datetime | None:
+    """解析 ISO 时间字符串。"""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except Exception:
+        return None
+
+
+def _format_duration_seconds(seconds: float) -> str:
+    """将秒数格式化为友好文本。"""
+    if seconds < 0:
+        seconds = 0
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    if seconds < 3600:
+        minutes = int(seconds // 60)
+        sec = int(seconds % 60)
+        return f"{minutes}m {sec}s"
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    return f"{hours}h {minutes}m"
+
+
+def _task_to_web_dict(task) -> dict:
+    """将 PersistedTask 转换为前端任务结构。"""
+    context = task.context or {}
+    kind = context.get("kind", "single")
+    created_dt = _parse_iso_time(task.created_at)
+    updated_dt = _parse_iso_time(task.updated_at)
+    completed_dt = _parse_iso_time(task.completed_at)
+
+    start_dt = created_dt or updated_dt or datetime.now()
+    end_dt = completed_dt or updated_dt or datetime.now()
+    duration_text = _format_duration_seconds((end_dt - start_dt).total_seconds())
+
+    return {
+        "id": task.task_id,
+        "title": task.title or task.url or task.task_id,
+        "url": task.url,
+        "type": "single" if kind in ("url", "media") else str(kind),
+        "status": task.status.value,
+        "progress": float(task.progress or 0),
+        "progress_percent": float(task.progress or 0),
+        "downloaded_bytes": int(task.downloaded_bytes or 0),
+        "total_bytes": int(task.total_bytes or 0),
+        "speed": 0,
+        "eta": 0,
+        "filename": context.get("file_name", ""),
+        "error": task.error_message or "",
+        "source": task.source or "telegram",
+        "channel": str(task.chat_id) if task.chat_id is not None else "-",
+        "message_id": task.message_id,
+        "created_at": task.created_at,
+        "updated_at": task.updated_at,
+        "created_at_text": start_dt.strftime("%Y-%m-%d %H:%M:%S"),
+        "duration_text": duration_text,
+        "speed_text": "-",
+        "eta_text": "-",
+        "extra": {
+            "retry_count": int(task.retry_count or 0),
+            "max_retries": int(task.max_retries or 0),
+        },
+    }
+
+
 def create_web_ui_blueprint(static_dir: str = None):
-    """创建 Web UI 蓝图"""
+    """创建 Web UI 蓝图。"""
     if static_dir is None:
         static_dir = os.path.join(os.path.dirname(__file__), "templates")
 
     bp = Blueprint("web_ui", __name__, static_folder=static_dir, static_url_path="")
+    task_manager = get_task_manager()
+    persistence = get_persistence_manager()
 
     @bp.route("/")
     def root():
-        """根页面 - 检查登录状态"""
         session_id = request.cookies.get("session_id")
         user = get_current_user(session_id)
 
         if user:
-            return redirect(url_for("web_ui.dashboard"))
+            return redirect(url_for("web_ui.tasks_page"))
 
         return send_from_directory(static_dir, "login.html")
 
-    @bp.route("/dashboard")
-    def dashboard():
-        """仪表盘页面"""
-        session_id = request.cookies.get("session_id")
-        user = get_current_user(session_id)
-
-        if not user:
-            return redirect(url_for("web_ui.root"))
-
-        return send_from_directory(static_dir, "dashboard.html")
-
     @bp.route("/tasks")
     def tasks_page():
-        """下载任务页面"""
         session_id = request.cookies.get("session_id")
         user = get_current_user(session_id)
 
@@ -132,38 +212,35 @@ def create_web_ui_blueprint(static_dir: str = None):
 
         return send_from_directory(static_dir, "tasks.html")
 
+    @bp.route("/setup")
+    def setup_page():
+        session_id = request.cookies.get("session_id")
+        user = get_current_user(session_id)
+
+        if not user:
+            return redirect(url_for("web_ui.root"))
+
+        return send_from_directory(static_dir, "setup.html")
+
     @bp.route("/api/login", methods=["POST"])
     def login():
-        """登录接口"""
         try:
             data = request.get_json() or {}
             username = data.get("username")
             password = data.get("password")
 
-            logger.info(f"🔐 收到登录请求：用户名={username}")
-
             if not username or not password:
-                logger.warning("用户名或密码为空")
                 return jsonify({"success": False, "message": "用户名或密码不能为空"}), 400
 
             user = DEFAULT_USERS.get(username)
-            if not user:
-                logger.warning(f"用户不存在：{username}")
+            if not user or password != user["password"]:
                 return jsonify({"success": False, "message": "用户名或密码错误"}), 401
 
-            # 验证密码（简单比较）
-            if password != user["password"]:
-                logger.warning(f"密码错误：{username}")
-                return jsonify({"success": False, "message": "用户名或密码错误"}), 401
-
-            # 创建 session
             session_id = create_session(username)
 
-            response = make_response(jsonify({
-                "success": True,
-                "message": "登录成功",
-                "username": username
-            }))
+            response = make_response(
+                jsonify({"success": True, "message": "登录成功", "username": username})
+            )
             response.set_cookie(
                 key="session_id",
                 value=session_id,
@@ -171,160 +248,146 @@ def create_web_ui_blueprint(static_dir: str = None):
                 httponly=True,
                 samesite="lax",
             )
-            logger.info(f"✅ 登录成功：{username}")
             return response
 
         except Exception as e:
-            logger.error(f"❌ 登录接口异常：{e}")
-            return jsonify({"success": False, "message": f"服务器错误：{str(e)}"}), 500
+            logger.error("登录接口异常: %s", e)
+            return jsonify({"success": False, "message": f"服务器错误: {e}"}), 500
 
     @bp.route("/api/logout", methods=["POST"])
     def logout():
-        """登出接口"""
         session_id = request.cookies.get("session_id")
         if session_id:
             remove_session(session_id)
 
         response = make_response(jsonify({"success": True, "message": "已退出"}))
-        response.set_cookie(
-            key="session_id",
-            value="",
-            expires=0,
-        )
+        response.set_cookie(key="session_id", value="", expires=0)
         return response
 
     @bp.route("/api/status")
     def get_status():
-        """获取系统状态"""
-        # 不需要登录也可以访问，用于检查配置状态
         session_id = request.cookies.get("session_id")
         user = get_current_user(session_id)
+        stats = task_manager.get_statistics()
 
-        # 检查 bot 是否已配置（通过检查环境变量或配置文件）
-        # 这里简单判断：如果有 session 说明已登录，bot 可能已配置
-        bot_configured = user is not None
-        
-        return jsonify({
-            "success": True,
-            "username": user["username"] if user else "guest",
-            "bot_status": "running" if bot_configured else "stopped",
-            "active_tasks": 0,
-            "today_downloads": 0,
-        })
-
-    # ============ 任务管理 API ============
+        return jsonify(
+            {
+                "success": True,
+                "username": user["username"] if user else "guest",
+                "bot_status": "running" if user else "stopped",
+                "active_tasks": stats.get("active_tasks", 0),
+                "today_downloads": stats.get("today_downloads", 0),
+            }
+        )
 
     @bp.route("/api/tasks", methods=["GET"])
     def get_tasks():
-        """获取任务列表"""
         session_id = request.cookies.get("session_id")
         user = get_current_user(session_id)
 
         if not user:
             return jsonify({"success": False, "message": "未登录"}), 401
 
-        # 返回空任务列表（实际使用时需要从数据库或任务管理器读取）
-        status_filter = request.args.get("status_filter", "all")
-        limit = request.args.get("limit", "50")
-        
-        logger.info(f"📋 获取任务列表：filter={status_filter}, limit={limit}")
-        
-        return jsonify({
-            "success": True,
-            "tasks": [],  # 空任务列表
-            "total": 0
-        })
+        status_filter = (request.args.get("status_filter", "all") or "all").strip().lower()
+
+        try:
+            limit = int(request.args.get("limit", "50"))
+        except ValueError:
+            limit = 50
+        limit = max(1, min(limit, 500))
+
+        all_tasks = list(persistence.tasks.values())
+
+        if status_filter != "all":
+            status_alias = {
+                "processing": TaskPersistStatus.DOWNLOADING.value,
+            }
+            target_status = status_alias.get(status_filter, status_filter)
+            all_tasks = [t for t in all_tasks if t.status.value == target_status]
+
+        all_tasks.sort(key=lambda t: (t.updated_at or t.created_at or ""), reverse=True)
+        sliced = all_tasks[:limit]
+        task_items = [_task_to_web_dict(t) for t in sliced]
+
+        return jsonify({"success": True, "tasks": task_items, "total": len(all_tasks)})
 
     @bp.route("/api/tasks/<task_id>/cancel", methods=["POST"])
     def cancel_task(task_id):
-        """取消任务"""
         session_id = request.cookies.get("session_id")
         user = get_current_user(session_id)
 
         if not user:
             return jsonify({"success": False, "message": "未登录"}), 401
 
-        logger.info(f"🚫 取消任务：{task_id}")
-        
-        return jsonify({
-            "success": True,
-            "message": "任务已取消"
-        })
+        success = _run_async(persistence.cancel_task(task_id))
+        if not success:
+            return jsonify({"success": False, "message": "任务不存在或状态不可取消"}), 404
+
+        return jsonify({"success": True, "message": "任务已取消"})
 
     @bp.route("/api/tasks/<task_id>/pause", methods=["POST"])
     def pause_task(task_id):
-        """暂停任务"""
         session_id = request.cookies.get("session_id")
         user = get_current_user(session_id)
 
         if not user:
             return jsonify({"success": False, "message": "未登录"}), 401
 
-        logger.info(f"⏸️ 暂停任务：{task_id}")
-        
-        return jsonify({
-            "success": True,
-            "message": "任务已暂停"
-        })
+        success = _run_async(persistence.pause_task(task_id))
+        if not success:
+            return jsonify({"success": False, "message": "任务不存在或状态不可暂停"}), 404
+
+        return jsonify({"success": True, "message": "任务已暂停"})
 
     @bp.route("/api/tasks/<task_id>/resume", methods=["POST"])
     def resume_task(task_id):
-        """恢复任务"""
         session_id = request.cookies.get("session_id")
         user = get_current_user(session_id)
 
         if not user:
             return jsonify({"success": False, "message": "未登录"}), 401
 
-        logger.info(f"▶️ 恢复任务：{task_id}")
-        
-        return jsonify({
-            "success": True,
-            "message": "任务已恢复"
-        })
+        success = _run_async(persistence.resume_task(task_id))
+        if not success:
+            return jsonify({"success": False, "message": "任务不存在或状态不可恢复"}), 404
+
+        return jsonify({"success": True, "message": "任务已恢复"})
 
     @bp.route("/api/tasks/<task_id>/retry", methods=["POST"])
     def retry_task(task_id):
-        """重试任务"""
         session_id = request.cookies.get("session_id")
         user = get_current_user(session_id)
 
         if not user:
             return jsonify({"success": False, "message": "未登录"}), 401
 
-        logger.info(f"🔄 重试任务：{task_id}")
-        
-        return jsonify({
-            "success": True,
-            "message": "任务已重新排队"
-        })
+        task = _run_async(persistence.get_task(task_id))
+        if not task:
+            return jsonify({"success": False, "message": "任务不存在"}), 404
+
+        _run_async(persistence.update_status(task_id, TaskPersistStatus.PENDING, ""))
+        return jsonify({"success": True, "message": "任务已重新排队"})
 
     @bp.route("/api/tasks/completed", methods=["DELETE"])
     def clear_completed_tasks():
-        """清除已完成的任务"""
         session_id = request.cookies.get("session_id")
         user = get_current_user(session_id)
 
         if not user:
             return jsonify({"success": False, "message": "未登录"}), 401
 
-        logger.info("🧹 清除已完成任务")
-        
-        return jsonify({
-            "success": True,
-            "cleared": 0
-        })
+        cleared = _run_async(persistence.cleanup_completed(days=0))
+        return jsonify({"success": True, "cleared": int(cleared)})
 
     return bp
 
 
 if __name__ == "__main__":
-    # 测试运行
     from flask import Flask
+
     app = Flask(__name__)
-    
     static_dir = os.path.join(os.path.dirname(__file__), "templates")
     bp = create_web_ui_blueprint(static_dir)
     app.register_blueprint(bp)
-    
+
     app.run(host="0.0.0.0", port=8531, debug=True)

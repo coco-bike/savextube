@@ -159,7 +159,7 @@
               if (response.ok && data.success) {
                 ElementPlus.ElMessage.success("登录成功");
                 setTimeout(() => {
-                  window.location.href = "/dashboard";
+                  window.location.href = "/tasks";
                 }, 500);
               } else {
                 ElementPlus.ElMessage.error(data.message || "登录失败");
