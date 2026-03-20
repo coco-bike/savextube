@@ -5208,6 +5208,8 @@ class TelegramBot:
         self._telethon_reconnect_count = 0  # Telethon 重连次数统计
         self._telethon_last_reconnect_time = 0  # Telethon 上次重连时间戳
         self._telethon_reconnect_cooldown = 60  # Telethon 重连冷却时间（秒）
+        self._telethon_listener_task = None  # Telethon 事件监听任务
+        self._telethon_listener_stop_event = None  # 事件监听停止信号
         
         logger.info("✅ 自动重连机制已初始化")
 
@@ -5253,13 +5255,20 @@ class TelegramBot:
             self._telethon_target_entity = None
             logger.info("✅ Telethon 客户端热重载成功")
             
-            # 启动 Telethon 心跳检测
+            # 启动 Telethon 心跳检测和事件监听
             if self.main_loop:
                 asyncio.run_coroutine_threadsafe(
                     self._keep_alive_telethon_heartbeat(),
                     self.main_loop
                 )
                 logger.info("🔔 Telethon 心跳检测已启动（热重载后）")
+                
+                # 启动事件监听器
+                asyncio.run_coroutine_threadsafe(
+                    self._restart_telethon_listener(),
+                    self.main_loop
+                )
+                logger.info("📡 Telethon 事件监听已启动（热重载后）")
             
             return "ok"
         except Exception as e:
@@ -6065,6 +6074,10 @@ class TelegramBot:
                 if self.user_client:
                     asyncio.create_task(self._keep_alive_telethon_heartbeat())
                     logger.info("🔔 Telethon 心跳检测已启动")
+                    
+                    # 启动 Telethon 事件监听循环
+                    await self._restart_telethon_listener()
+                    logger.info("📡 Telethon 事件监听已启动")
                 else:
                     logger.info("⏳ Telethon 客户端未初始化，心跳检测将在热重载后启动")
 
@@ -6318,8 +6331,17 @@ class TelegramBot:
                     if self._telethon_heartbeat_fail_count > 0:
                         logger.info(f"💓 Telethon 心跳恢复成功，重置失败计数（之前连续失败 {self._telethon_heartbeat_fail_count} 次）")
                         self._telethon_heartbeat_fail_count = 0
+                        
+                        # 检查事件监听器是否运行，如果没有则重启
+                        if not self._telethon_listener_task or self._telethon_listener_task.done():
+                            logger.warning("⚠️ Telethon 心跳恢复，但事件监听器未运行，重启监听器")
+                            await self._restart_telethon_listener()
                     else:
                         logger.debug("💓 Telethon 心跳保持连接活跃")
+                        # 定期检查监听器
+                        if not self._telethon_listener_task or self._telethon_listener_task.done():
+                            logger.debug("⚠️ 事件监听器已停止，重新启动")
+                            await self._restart_telethon_listener()
                 except asyncio.TimeoutError:
                     self._telethon_heartbeat_fail_count += 1
                     logger.warning(f"💔 Telethon 心跳超时 ({self._telethon_heartbeat_fail_count}/3)")
@@ -6386,6 +6408,80 @@ class TelegramBot:
                     # 连接失败后不设置 user_client 为 None，保留旧实例供下次重试
         except Exception as e:
             logger.error(f"❌ 重启 Telethon 连接失败: {e}")
+        
+        # 重连成功后重启事件监听器
+        await self._restart_telethon_listener()
+
+    async def _restart_telethon_listener(self):
+        """重启 Telethon 事件监听任务"""
+        # 停止旧的监听任务
+        if self._telethon_listener_task and not self._telethon_listener_task.done():
+            logger.info("🛑 停止旧的 Telethon 事件监听任务...")
+            if self._telethon_listener_stop_event:
+                self._telethon_listener_stop_event.set()
+            try:
+                await asyncio.wait_for(self._telethon_listener_task, timeout=5.0)
+            except asyncio.TimeoutError:
+                logger.warning("⚠️ 停止旧监听任务超时，强制取消")
+                self._telethon_listener_task.cancel()
+            except Exception as e:
+                logger.warning(f"⚠️ 停止旧监听任务异常: {e}")
+        
+        # 创建新的停止信号
+        self._telethon_listener_stop_event = asyncio.Event()
+        
+        # 启动新的监听任务
+        if self.user_client and self.user_client.is_connected():
+            logger.info("🚀 启动新的 Telethon 事件监听任务")
+            self._telethon_listener_task = asyncio.create_task(
+                self._run_telethon_event_loop()
+            )
+        else:
+            logger.warning("⚠️ Telethon 客户端未连接，跳过事件监听启动")
+
+    async def _run_telethon_event_loop(self):
+        """运行 Telethon 事件监听循环，处理断线重连"""
+        while not self._telethon_listener_stop_event.is_set():
+            try:
+                if not self.user_client:
+                    logger.debug("⏳ Telethon 客户端未初始化，等待...")
+                    await asyncio.sleep(5)
+                    continue
+                
+                if not self.user_client.is_connected():
+                    logger.debug("⏳ Telethon 客户端未连接，等待重连...")
+                    await asyncio.sleep(5)
+                    continue
+                
+                # 使用 run_until_disconnected 保持事件循环运行
+                # 但在异步上下文中使用等待机制
+                logger.info("📡 Telethon 事件监听循环已启动")
+                
+                # 在断线或停止信号时退出
+                while not self._telethon_listener_stop_event.is_set():
+                    if not self.user_client.is_connected():
+                        logger.warning("⚠️ Telethon 连接已断开，事件监听将停止")
+                        break
+                    await asyncio.sleep(1)
+                
+                logger.info("🛑 Telethon 事件监听循环已停止")
+                break
+                
+            except asyncio.CancelledError:
+                logger.info("📡 Telethon 事件监听任务被取消")
+                break
+            except Exception as e:
+                logger.error(f"❌ Telethon 事件监听循环异常: {e}")
+                await asyncio.sleep(5)
+                # 如果连接异常，触发重连
+                if self.user_client and not self.user_client.is_connected():
+                    logger.warning("⚠️ 事件监听发现连接异常，触发重连")
+                    if hasattr(self, 'main_loop') and self.main_loop:
+                        asyncio.run_coroutine_threadsafe(
+                            self._restart_telethon_connection(),
+                            self.main_loop
+                        )
+                    break
 
     async def reboot_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """处理 /reboot 命令 - 重启容器"""
