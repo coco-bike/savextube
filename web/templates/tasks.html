@@ -124,10 +124,6 @@
         background: #fdf6ec;
         color: #e6a23c;
       }
-      .task-item .task-status.paused {
-        background: #e4e7ed;
-        color: #606266;
-      }
       .task-item .task-info {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
@@ -206,7 +202,6 @@
             <el-radio-group v-model="activeTab" size="large">
               <el-radio-button label="all">全部任务</el-radio-button>
               <el-radio-button label="processing">进行中</el-radio-button>
-              <el-radio-button label="paused">已暂停</el-radio-button>
               <el-radio-button label="completed">已完成</el-radio-button>
               <el-radio-button label="failed">失败</el-radio-button>
             </el-radio-group>
@@ -324,25 +319,11 @@
 
               <!-- 操作按钮 -->
               <div class="task-actions" v-if="task.statusType === 'processing'">
-                <el-button size="small" @click="pauseTask(task)"
-                  >⏸️ 暂停</el-button
-                >
                 <el-button size="small" type="danger" @click="cancelTask(task)"
                   >⏹️ 取消</el-button
                 >
               </div>
-              <div class="task-actions" v-if="task.statusType === 'paused'">
-                <el-button size="small" type="success" @click="resumeTask(task)"
-                  >▶️ 恢复</el-button
-                >
-                <el-button size="small" type="danger" @click="cancelTask(task)"
-                  >⏹️ 取消</el-button
-                >
-              </div>
-              <div class="task-actions" v-if="task.statusType === 'completed'">
-                <el-button size="small" type="success" @click="openFolder(task)"
-                  >📁 打开文件夹</el-button
-                >
+              <div class="task-actions" v-if="task.statusType === 'success'">
                 <el-button size="small" @click="retryTask(task)"
                   >🔄 重新下载</el-button
                 >
@@ -391,7 +372,7 @@
             queued: { text: "排队中", class: "pending" },
             downloading: { text: "下载中", class: "processing" },
             processing: { text: "处理中", class: "processing" },
-            paused: { text: "已暂停", class: "paused" },
+            paused: { text: "等待中", class: "pending" },
             completed: { text: "已完成", class: "success" },
             failed: { text: "失败", class: "error" },
             cancelled: { text: "已取消", class: "error" },
@@ -441,9 +422,8 @@
             }
             const statusClassMap = {
               processing: "processing",
-              paused: "paused",
-              completed: "completed",
-              failed: "failed",
+              completed: "success",
+              failed: "error",
             };
             const targetClass = statusClassMap[activeTab.value];
             if (!targetClass) return tasks.value;
@@ -496,7 +476,7 @@
 
               if (result.success) {
                 tasks.value = tasks.value.filter(
-                  (t) => t.statusType !== "completed",
+                  (t) => t.statusType !== "success",
                 );
                 ElementPlus.ElMessage.success(
                   `已清除 ${result.cleared} 个已完成任务`,
@@ -509,41 +489,6 @@
             }
           };
 
-          const pauseTask = async (task) => {
-            try {
-              const response = await fetch(`/api/tasks/${task.id}/pause`, {
-                method: "POST",
-                credentials: "include",
-              });
-              const result = await response.json();
-
-              if (result.success) {
-                task.statusType = "paused";
-                task.statusText = "已暂停";
-                ElementPlus.ElMessage.success(`任务已暂停：${task.title}`);
-              }
-            } catch (error) {
-              ElementPlus.ElMessage.error("暂停失败");
-            }
-          };
-
-          const resumeTask = async (task) => {
-            try {
-              const response = await fetch(`/api/tasks/${task.id}/resume`, {
-                method: "POST",
-                credentials: "include",
-              });
-              const result = await response.json();
-
-              if (result.success) {
-                task.statusType = "processing";
-                task.statusText = "下载中";
-                ElementPlus.ElMessage.success(`任务已恢复：${task.title}`);
-              }
-            } catch (error) {
-              ElementPlus.ElMessage.error("恢复失败");
-            }
-          };
 
           const cancelTask = async (task) => {
             try {
@@ -570,11 +515,6 @@
                 ElementPlus.ElMessage.error("取消失败");
               }
             }
-          };
-
-          const openFolder = (task) => {
-            ElementPlus.ElMessage.info(`打开文件夹：${task.title}`);
-            // TODO: 调用 API 打开文件夹
           };
 
           const retryTask = async (task) => {
@@ -640,9 +580,7 @@
             loading,
             refreshTasks,
             clearCompleted,
-            pauseTask,
             cancelTask,
-            openFolder,
             retryTask,
             viewLog,
             logout,

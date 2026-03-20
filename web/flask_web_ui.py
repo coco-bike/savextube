@@ -153,12 +153,17 @@ def _task_to_web_dict(task) -> dict:
     end_dt = completed_dt or updated_dt or datetime.now()
     duration_text = _format_duration_seconds((end_dt - start_dt).total_seconds())
 
+    status_value = task.status.value
+    if status_value == TaskPersistStatus.PAUSED.value:
+        # 前端已取消“已暂停”状态，历史 paused 任务统一按等待中展示。
+        status_value = TaskPersistStatus.PENDING.value
+
     return {
         "id": task.task_id,
         "title": task.title or task.url or task.task_id,
         "url": task.url,
         "type": "single" if kind in ("url", "media") else str(kind),
-        "status": task.status.value,
+        "status": status_value,
         "progress": float(task.progress or 0),
         "progress_percent": float(task.progress or 0),
         "downloaded_bytes": int(task.downloaded_bytes or 0),
@@ -301,6 +306,7 @@ def create_web_ui_blueprint(static_dir: str = None):
         if status_filter != "all":
             status_alias = {
                 "processing": TaskPersistStatus.DOWNLOADING.value,
+                "paused": TaskPersistStatus.PENDING.value,
             }
             target_status = status_alias.get(status_filter, status_filter)
             all_tasks = [t for t in all_tasks if t.status.value == target_status]
@@ -333,11 +339,7 @@ def create_web_ui_blueprint(static_dir: str = None):
         if not user:
             return jsonify({"success": False, "message": "未登录"}), 401
 
-        success = _run_async(persistence.pause_task(task_id))
-        if not success:
-            return jsonify({"success": False, "message": "任务不存在或状态不可暂停"}), 404
-
-        return jsonify({"success": True, "message": "任务已暂停"})
+        return jsonify({"success": False, "message": "任务暂停功能已下线"}), 410
 
     @bp.route("/api/tasks/<task_id>/resume", methods=["POST"])
     def resume_task(task_id):
@@ -347,11 +349,7 @@ def create_web_ui_blueprint(static_dir: str = None):
         if not user:
             return jsonify({"success": False, "message": "未登录"}), 401
 
-        success = _run_async(persistence.resume_task(task_id))
-        if not success:
-            return jsonify({"success": False, "message": "任务不存在或状态不可恢复"}), 404
-
-        return jsonify({"success": True, "message": "任务已恢复"})
+        return jsonify({"success": False, "message": "任务恢复功能已下线"}), 410
 
     @bp.route("/api/tasks/<task_id>/retry", methods=["POST"])
     def retry_task(task_id):

@@ -71,6 +71,14 @@ class TaskRecoveryManager:
                         continue
                     if task.task_id in self.inflight_task_ids:
                         continue
+                    if self._is_non_retryable_error(task):
+                        await self.persistence.update_status(
+                            task.task_id,
+                            TaskPersistStatus.FAILED,
+                            task.error_message or "Marked as non-retryable error",
+                        )
+                        logger.warning("Task marked non-retryable and failed: %s", task.task_id)
+                        continue
 
                     retry_delay = self._get_retry_delay(task.retry_count)
                     if retry_delay < 0:
@@ -98,6 +106,15 @@ class TaskRecoveryManager:
         if retry_count >= len(self.retry_delays):
             return -1
         return self.retry_delays[retry_count]
+
+    def _is_non_retryable_error(self, task: PersistedTask) -> bool:
+        error_text = (task.error_message or "").lower()
+        non_retryable_signatures = (
+            "no matched telethon message found",
+            "无法找到匹配的telethon消息",
+            "无法找到匹配的媒体消息",
+        )
+        return any(signature in error_text for signature in non_retryable_signatures)
 
     async def _retry_task(self, task: PersistedTask):
         """Retry a single task by asking the bot to resume it."""
@@ -165,6 +182,28 @@ class TaskRecoveryManager:
         for task in active_tasks:
             if task.status not in resumable_statuses:
                 continue
+            if task.status == TaskPersistStatus.ERROR:
+                if task.retry_count >= task.max_retries:
+                    await self.persistence.update_status(
+                        task.task_id,
+                        TaskPersistStatus.FAILED,
+                        f"Exceeded max retries ({task.max_retries}) before startup resume",
+                    )
+                    logger.warning(
+                        "Skip startup resume for over-retried task: %s (retry_count=%s, max=%s)",
+                        task.task_id,
+                        task.retry_count,
+                        task.max_retries,
+                    )
+                    continue
+                if self._is_non_retryable_error(task):
+                    await self.persistence.update_status(
+                        task.task_id,
+                        TaskPersistStatus.FAILED,
+                        task.error_message or "Marked as non-retryable before startup resume",
+                    )
+                    logger.warning("Skip startup resume for non-retryable task: %s", task.task_id)
+                    continue
             if task.task_id in self.paused_tasks:
                 continue
             if task.task_id in self.inflight_task_ids:

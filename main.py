@@ -5027,6 +5027,7 @@ class TelegramBot:
         self.error_circuit = None
         self.web_task_manager = None
         self.user_client: Optional[TelegramClient] = None
+        self._telethon_target_entity = None
         self.main_loop: Optional[asyncio.AbstractEventLoop] = None  # 保存主事件循环
 
         try:
@@ -5178,6 +5179,21 @@ class TelegramBot:
         self.allowed_user_ids = self._parse_user_ids(os.getenv("TELEGRAM_BOT_ALLOWED_USER_IDS", ""))
         logger.info(f"🔐 允许的用户: {self.allowed_user_ids}")
 
+        # 持久化自动清理配置
+        auto_cleanup_raw = os.getenv("PERSISTENCE_AUTO_CLEANUP", "true").strip().lower()
+        self.persistence_auto_cleanup_enabled = auto_cleanup_raw not in ("0", "false", "no", "off")
+        self.persistence_cleanup_interval_hours = max(
+            1,
+            int(os.getenv("PERSISTENCE_CLEANUP_INTERVAL_HOURS", "24") or 24),
+        )
+        self.persistence_cleanup_keep_days = max(
+            0,
+            int(os.getenv("PERSISTENCE_CLEANUP_KEEP_DAYS", "7") or 7),
+        )
+        self._persistence_cleanup_task: Optional[asyncio.Task] = None
+        # 固定启用：重启后丢弃积压更新，避免重复消费旧消息导致重复下载。
+        self.telegram_drop_pending_updates = True
+
         # 新增：自动重连机制状态变量
         self._reconnect_lock = asyncio.Lock()  # 重连互斥锁，防止并发重连
         self._is_reconnecting = False  # 是否正在重连中
@@ -5205,6 +5221,7 @@ class TelegramBot:
                 except Exception:
                     pass
                 self.user_client = None
+                self._telethon_target_entity = None
 
             # 参数兜底
             api_id = api_id or os.getenv("TELEGRAM_BOT_API_ID")
@@ -5233,6 +5250,7 @@ class TelegramBot:
 
             await client.start()
             self.user_client = client
+            self._telethon_target_entity = None
             logger.info("✅ Telethon 客户端热重载成功")
             
             # 启动 Telethon 心跳检测
@@ -5572,6 +5590,7 @@ class TelegramBot:
                 BotCommand("favsub", "订阅B站收藏夹"),
                 BotCommand("setting", "功能设置"),
                 BotCommand("cleanup", "清理文件"),
+                BotCommand("clear_cache", "清理任务缓存"),
                 BotCommand("cancel", "取消下载"),
                 BotCommand("reboot", "重启容器"),
             ]
@@ -5836,6 +5855,7 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("favsub", self.favsub_command))
         self.application.add_handler(CommandHandler("setting", self.setting_command))
         self.application.add_handler(CommandHandler("cleanup", self.cleanup_command))
+        self.application.add_handler(CommandHandler("clear_cache", self.clear_cache_command))
         self.application.add_handler(CommandHandler("cancel", self.cancel_command))
         self.application.add_handler(CommandHandler("reboot", self.reboot_command))
         self.application.add_handler(
@@ -5921,6 +5941,7 @@ class TelegramBot:
                     )
                 logger.info("正在连接 Telethon 客户端...")
                 await self.user_client.start()
+                self._telethon_target_entity = None
                 logger.info("Telethon 客户端连接成功。")
             except Exception as e:
                 logger.error(f"Telethon 客户端启动失败: {e}", exc_info=True)
@@ -6002,11 +6023,16 @@ class TelegramBot:
                             self._restart_bot_connection(reason=f"Polling 错误: {type(error).__name__}"),
                             self.main_loop
                         )
-                
+
+                logger.info(
+                    "Telegram polling 参数: drop_pending_updates=%s",
+                    self.telegram_drop_pending_updates,
+                )
+
                 await self.application.updater.start_polling(
                     timeout=30,  # 增加超时时间
                     error_callback=polling_error_callback,
-                    drop_pending_updates=False,  # 保留待处理更新，避免网络抖动期间丢任务
+                    drop_pending_updates=self.telegram_drop_pending_updates,
                     allowed_updates=Update.ALL_TYPES,
                 )
 
@@ -6023,6 +6049,17 @@ class TelegramBot:
                         recovery_result.get("success_count", 0),
                         recovery_result.get("fail_count", 0),
                     )
+
+                if self.persistence and self.persistence_auto_cleanup_enabled:
+                    if not self._persistence_cleanup_task or self._persistence_cleanup_task.done():
+                        self._persistence_cleanup_task = asyncio.create_task(
+                            self._run_persistence_cleanup_loop()
+                        )
+                        logger.info(
+                            "🧹 持久化自动清理已启动（间隔=%sh, 保留=%s天）",
+                            self.persistence_cleanup_interval_hours,
+                            self.persistence_cleanup_keep_days,
+                        )
                 
                 # 启动 Telethon 心跳检测（如果客户端已初始化）
                 if self.user_client:
@@ -6053,6 +6090,8 @@ class TelegramBot:
                     raise
         except Exception as e:
             logger.error(f"应用程序启动失败: {e}")
+            if self._persistence_cleanup_task and not self._persistence_cleanup_task.done():
+                self._persistence_cleanup_task.cancel()
             # 确保应用程序正确关闭
             if self.application and self.application.running:
                 try:
@@ -6062,6 +6101,32 @@ class TelegramBot:
             raise
 
     # 健康检查功能已删除，避免事件循环冲突
+
+    async def _run_persistence_cleanup_loop(self):
+        """定期清理持久化任务，避免 tasks.json 无限增长"""
+        interval_seconds = max(3600, int(self.persistence_cleanup_interval_hours * 3600))
+        keep_days = max(0, int(self.persistence_cleanup_keep_days))
+        first_round = True
+
+        while True:
+            try:
+                if not first_round:
+                    await asyncio.sleep(interval_seconds)
+                first_round = False
+                if not self.persistence:
+                    continue
+                removed = await self.persistence.cleanup_completed(days=keep_days)
+                logger.info(
+                    "🧹 自动清理持久化任务完成：删除 %s 条（保留 %s 天）",
+                    removed,
+                    keep_days,
+                )
+            except asyncio.CancelledError:
+                logger.info("🛑 持久化自动清理任务已停止")
+                break
+            except Exception as e:
+                logger.warning(f"⚠️ 持久化自动清理失败: {e}")
+                await asyncio.sleep(60)
 
     async def _restart_bot_connection(self, reason: str = "未知原因"):
         """重启Bot连接（带防抖机制）
@@ -6138,7 +6203,7 @@ class TelegramBot:
                 await self.application.updater.start_polling(
                     timeout=30,
                     error_callback=polling_error_callback_reconnect,
-                    drop_pending_updates=False,
+                    drop_pending_updates=self.telegram_drop_pending_updates,
                     allowed_updates=Update.ALL_TYPES,
                 )
                 await asyncio.sleep(1)
@@ -6311,6 +6376,7 @@ class TelegramBot:
                     # 验证连接
                     me = await self.user_client.get_me()
                     logger.info(f"✅ Telethon 连接验证成功: {me.first_name} (@{me.username})")
+                    self._telethon_target_entity = None
                     
                     # 重置心跳失败计数
                     self._telethon_heartbeat_fail_count = 0
@@ -6551,6 +6617,7 @@ class TelegramBot:
             "• /status 查看系统状态\n"
             "• /version 查看版本\n"
             "• /cleanup 清理文件\n"
+            "• /clear_cache 清理持久化缓存\n"
             "• /cancel 取消下载任务"
         )
         await update.message.reply_text(setting_text)
@@ -10200,6 +10267,7 @@ class TelegramBot:
             "• <b>/favsub</b> - 订阅B站收藏夹\n"
             "• <b>/setting</b> - 功能设置\n"
             "• <b>/cleanup</b> - 清理文件\n"
+            "• <b>/clear_cache</b> - 清理持久化缓存\n"
             "• <b>/cancel</b> - 取消下载\n"
             "• <b>/reboot</b> - 重启容器\n"
             "\n"
@@ -10337,6 +10405,38 @@ class TelegramBot:
             logger.error(f"Failed to persist URL task: {e}")
             return None
 
+    async def _find_existing_media_task(
+        self,
+        chat_id: int | None,
+        message_id: int | None,
+        file_unique_id: str,
+    ) -> tuple[str, TaskPersistStatus] | None:
+        """查找同一媒体消息是否已有持久化任务，避免重启后重复消费旧更新。"""
+        if not self.persistence or not chat_id or not message_id:
+            return None
+
+        try:
+            async with self.persistence.lock:
+                for task in self.persistence.tasks.values():
+                    if task.source != "telegram":
+                        continue
+                    if task.chat_id != chat_id or task.message_id != message_id:
+                        continue
+
+                    task_context = getattr(task, "context", {}) or {}
+                    if task_context.get("kind") != "media":
+                        continue
+
+                    existing_unique_id = task_context.get("file_unique_id", "") or ""
+                    if file_unique_id and existing_unique_id and existing_unique_id != file_unique_id:
+                        continue
+
+                    return task.task_id, task.status
+        except Exception as e:
+            logger.warning(f"检查重复媒体任务失败: {e}")
+
+        return None
+
     async def _create_persisted_media_task(
         self,
         update: Update,
@@ -10470,6 +10570,41 @@ class TelegramBot:
         except Exception as e:
             logger.debug(f"Finalize web task failed: {e}")
 
+    async def _get_telethon_target_entity(self, context, force_refresh: bool = False):
+        """获取 Telethon 侧与机器人会话的目标实体（带缓存）"""
+        if not self.user_client:
+            raise RuntimeError("Telethon client unavailable")
+        if not self.bot_id:
+            raise RuntimeError("bot_id is not initialized")
+
+        if (not force_refresh) and self._telethon_target_entity is not None:
+            return self._telethon_target_entity
+
+        last_error = None
+
+        # 方案1：直接使用 bot_id（优先，最稳定）
+        try:
+            target_entity = await self.user_client.get_entity(self.bot_id)
+            self._telethon_target_entity = target_entity
+            return target_entity
+        except Exception as e:
+            last_error = e
+            logger.warning(f"无法通过 bot_id 获取 Telethon 实体: {e}")
+
+        # 方案2：使用 bot username
+        try:
+            bot_info = await context.bot.get_me()
+            bot_username = getattr(bot_info, "username", "")
+            if bot_username:
+                target_entity = await self.user_client.get_entity(bot_username)
+                self._telethon_target_entity = target_entity
+                return target_entity
+        except Exception as e:
+            last_error = e
+            logger.warning(f"无法通过 bot 用户名获取 Telethon 实体: {e}")
+
+        raise RuntimeError(f"Failed to resolve Telethon target entity: {last_error}")
+
     async def resume_persisted_task(self, task, notify: bool = True) -> bool:
         """Requeue a persisted Telegram task."""
         if not self.application or not getattr(self.application, "bot", None):
@@ -10542,8 +10677,9 @@ class TelegramBot:
                         self.file_id = file_id
 
                 class _RecoveryMessage:
-                    def __init__(self, recovery_chat_id):
+                    def __init__(self, recovery_chat_id, recovery_message_id):
                         self.chat_id = recovery_chat_id
+                        self.message_id = recovery_message_id
                         self.text = message_text
                         try:
                             self.date = datetime.fromisoformat(bot_message_time) if bot_message_time else datetime.now()
@@ -10556,13 +10692,18 @@ class TelegramBot:
                         return await self._bot.send_message(chat_id=self.chat_id, text=text, **kwargs)
 
                 class _RecoveryUpdate:
-                    def __init__(self, recovery_user_id, recovery_chat_id, bot):
+                    def __init__(self, recovery_user_id, recovery_chat_id, recovery_message_id, bot):
                         self.effective_user = type("RecoveryUser", (), {"id": recovery_user_id})()
-                        msg = _RecoveryMessage(recovery_chat_id)
+                        msg = _RecoveryMessage(recovery_chat_id, recovery_message_id)
                         msg._bot = bot
                         self.message = msg
 
-                recovery_update = _RecoveryUpdate(user_id, chat_id, self.application.bot)
+                recovery_update = _RecoveryUpdate(
+                    user_id,
+                    chat_id,
+                    getattr(task, "message_id", None),
+                    self.application.bot,
+                )
                 recovery_context = _RecoveryContext(self.application.bot)
                 asyncio.create_task(
                     self.download_user_media(
@@ -10709,6 +10850,35 @@ class TelegramBot:
             )
             await message.reply_text("❌ 媒体下载功能未启用（Telethon 未配置），请联系管理员。")
             return
+
+        # 提取媒体信息（前置于入队逻辑，便于做重复任务检测）
+        attachment = message.effective_attachment
+        if not attachment:
+            await self._update_persisted_task_status(
+                persisted_media_task_id,
+                TaskPersistStatus.ERROR,
+                "No media attachment",
+            )
+            await message.reply_text("❓ 请发送或转发一个媒体文件。")
+            return
+
+        # 去重保护：避免重启后重复消费同一消息导致重复下载
+        # 仅在新消息入口生效（from_queue=False 且非恢复任务）。
+        if (not from_queue) and (not persisted_media_task_id):
+            existing_media_task = await self._find_existing_media_task(
+                chat_id=chat_id,
+                message_id=getattr(message, "message_id", None),
+                file_unique_id=getattr(attachment, "file_unique_id", "") or "",
+            )
+            if existing_media_task:
+                existing_task_id, existing_status = existing_media_task
+                logger.info(
+                    "跳过重复媒体任务: message_id=%s, existing_task=%s, status=%s",
+                    getattr(message, "message_id", None),
+                    existing_task_id,
+                    existing_status.value,
+                )
+                return
         
         # 媒体队列模式：入口先入队，由队列按并发上限处理
         # from_queue=True 时表示已在队列 worker 中，避免重复入队。
@@ -10716,10 +10886,19 @@ class TelegramBot:
             # 使用批量队列处理
             status_message = await message.reply_text("📥 已加入下载队列，请稍候...")
             queued = await self.media_batch_processor.add_to_queue(
-                update, context, message, status_message, message.effective_attachment
+                update, context, message, status_message, attachment, persisted_media_task_id
             )
             if queued:
-                logger.info(f"📥 媒体文件已加入批量队列 | 队列长度：{self.media_batch_processor.queue.qsize()}")
+                try:
+                    metrics = await self.media_batch_processor.get_runtime_metrics()
+                    logger.info(
+                        "📥 媒体文件已加入批量队列 | 待处理: %s, 执行中: %s, 总计: %s",
+                        metrics.get("queued", 0),
+                        metrics.get("active", 0),
+                        metrics.get("total", 0),
+                    )
+                except Exception:
+                    logger.info(f"📥 媒体文件已加入批量队列 | 队列长度：{self.media_batch_processor.queue.qsize()}")
             else:
                 logger.warning("⚠️ 媒体文件入队失败：队列已满")
             return
@@ -10740,17 +10919,6 @@ class TelegramBot:
                 )
                 await message.reply_text(f"❌ 内部初始化错误：无法获取机器人自身ID。请稍后重试。")
                 return
-        # 提取媒体信息
-        attachment = message.effective_attachment
-        if not attachment:
-            await self._update_persisted_task_status(
-                persisted_media_task_id,
-                TaskPersistStatus.ERROR,
-                "No media attachment",
-            )
-            await message.reply_text("❓ 请发送或转发一个媒体文件。")
-            return
-
         file_name = getattr(attachment, 'file_name', 'unknown_file')
         # 优先处理.torrent文件
         if file_name and file_name.lower().endswith('.torrent'):
@@ -10814,7 +10982,30 @@ class TelegramBot:
             file_name = 'unknown_file'
         file_size = getattr(attachment, 'file_size', 0)
         file_unique_id = getattr(attachment, 'file_unique_id', 'unknown_id')
+        source_message_id = getattr(message, "message_id", None)
+        attachment_file_id = getattr(attachment, "file_id", "")
         total_mb = file_size / (1024 * 1024) if file_size else 0
+
+        def _safe_text(value, fallback="unknown"):
+            if value is None:
+                return fallback
+            value_str = str(value).strip()
+            return value_str if value_str else fallback
+
+        def _shorten(value: str, max_len: int = 80) -> str:
+            if len(value) <= max_len:
+                return value
+            return value[: max_len - 3] + "..."
+
+        def _media_failure_summary() -> str:
+            safe_name = _shorten(_safe_text(file_name, "unknown_file"), 100)
+            return (
+                f"📝 文件: {safe_name}\n"
+                f"💾 大小: {total_mb:.2f}MB ({file_size} bytes)\n"
+                f"📨 消息ID: {_safe_text(source_message_id)}\n"
+                f"🆔 unique_id: {_safe_text(file_unique_id)}\n"
+                f"🔑 file_id: {_shorten(_safe_text(attachment_file_id), 60)}"
+            )
 
         # 记录 bot 端收到的消息信息
         bot_message_timestamp = message.date
@@ -10844,107 +11035,196 @@ class TelegramBot:
             video_width = None
             video_height = None
             video_duration = None
-            time_window_seconds = 5 # 允许5秒的时间误差
+
+            def _extract_media_for_match(msg):
+                msg_media = getattr(msg, "media", None)
+                if not msg_media:
+                    return None
+                return msg_media.document if hasattr(msg_media, "document") else msg_media
+
+            def _safe_time_delta_seconds(msg_date, target_date):
+                try:
+                    return abs((msg_date - target_date).total_seconds())
+                except Exception:
+                    return float("inf")
+
+            def _extract_media_attributes(media_to_check):
+                nonlocal audio_bitrate, audio_duration, video_width, video_height, video_duration, file_name
+                if not hasattr(media_to_check, "attributes"):
+                    return
+
+                logger.info(f"媒体属性列表: {[type(attr).__name__ for attr in media_to_check.attributes]}")
+                for attr in media_to_check.attributes:
+                    logger.info(f"检查属性: {type(attr).__name__} - {attr}")
+
+                    if isinstance(attr, types.DocumentAttributeAudio):
+                        if hasattr(attr, "bitrate"):
+                            audio_bitrate = attr.bitrate
+                        if hasattr(attr, "duration"):
+                            audio_duration = attr.duration
+                        logger.info(f"提取到音频元数据: 码率={audio_bitrate}, 时长={audio_duration}")
+
+                    elif isinstance(attr, types.DocumentAttributeVideo):
+                        if hasattr(attr, "w") and hasattr(attr, "h"):
+                            video_width = attr.w
+                            video_height = attr.h
+                            logger.info(f"提取到视频元数据: 分辨率={video_width}x{video_height}")
+
+                        if hasattr(attr, "duration"):
+                            video_duration = attr.duration
+                            logger.info(f"提取到视频时长: {video_duration}秒")
+
+                    elif isinstance(attr, types.DocumentAttributeFilename):
+                        logger.info(f"提取到文件名: {attr.file_name}")
+                        if not file_name or file_name == "unknown_file":
+                            file_name = attr.file_name
+                            logger.info(f"使用 Telethon 文件名: {file_name}")
 
             # 目标是与机器人的私聊
             try:
-                # 首先尝试使用bot_id获取实体
-                target_entity = await self.user_client.get_entity(self.bot_id)
-            except ValueError as e:
-                logger.warning(f"无法通过bot_id获取实体: {e}")
-                try:
-                    # 备用方案1: 尝试使用bot用户名
-                    bot_info = await context.bot.get_me()
-                    bot_username = bot_info.username
-                    if bot_username:
-                        logger.info(f"尝试使用bot用户名获取实体: @{bot_username}")
-                        target_entity = await self.user_client.get_entity(bot_username)
-                    else:
-                        raise ValueError("Bot没有用户名")
-                except Exception as e2:
-                    logger.warning(f"无法通过用户名获取实体: {e2}")
+                target_entity = await self._get_telethon_target_entity(context)
+            except Exception as e:
+                logger.error(f"无法获取 Telethon 目标实体: {e}")
+                await self._update_persisted_task_status(
+                    persisted_media_task_id,
+                    TaskPersistStatus.ERROR,
+                    f"Failed to access message history: {e}",
+                )
+                await status_message.edit_text(
+                    "❌ 无法访问消息历史，可能是Telethon会话问题。请联系管理员。"
+                )
+                return
+
+            direct_match_retries = max(1, int(os.getenv("TELETHON_DIRECT_MATCH_RETRIES", "8")))
+            direct_match_base_delay = max(0.2, float(os.getenv("TELETHON_DIRECT_MATCH_BASE_DELAY", "0.5")))
+            history_scan_limit = max(50, int(os.getenv("TELETHON_HISTORY_SCAN_LIMIT", "150")))
+            history_scan_window = max(120, int(os.getenv("TELETHON_HISTORY_SCAN_WINDOW", "1800")))
+
+            if source_message_id:
+                direct_none_hits = 0
+                for attempt_index in range(1, direct_match_retries + 1):
                     try:
-                        # 备用方案2: 使用 "me" 获取与自己的对话
-                        logger.info("尝试使用 'me' 获取对话")
-                        target_entity = await self.user_client.get_entity("me")
-                    except Exception as e3:
-                        logger.error(f"所有获取实体的方法都失败了: {e3}")
-                        await self._update_persisted_task_status(
-                            persisted_media_task_id,
-                            TaskPersistStatus.ERROR,
-                            f"Failed to access message history: {e3}",
+                        direct_result = await self.user_client.get_messages(target_entity, ids=source_message_id)
+                        if isinstance(direct_result, list):
+                            direct_message = direct_result[0] if direct_result else None
+                        else:
+                            direct_message = direct_result
+
+                        if not direct_message:
+                            direct_none_hits += 1
+                            logger.info(
+                                f"message_id 精确匹配未命中（第 {attempt_index}/{direct_match_retries} 次），"
+                                "等待消息同步后重试"
+                            )
+                            # 连续两次拿不到消息，通常是 Bot API / Telethon ID 空间不一致，提前降级。
+                            if direct_none_hits >= 2:
+                                logger.info(
+                                    "message_id 在 Telethon 对话中连续未命中，提前降级到历史扫描"
+                                )
+                                break
+                            if attempt_index < direct_match_retries:
+                                await asyncio.sleep(min(direct_match_base_delay * attempt_index, 2.5))
+                            continue
+
+                        direct_none_hits = 0
+                        direct_media = _extract_media_for_match(direct_message) if direct_message else None
+                        direct_size = getattr(direct_media, "size", 0) if direct_media else 0
+                        if direct_media and (not file_size or direct_size == file_size):
+                            telethon_message = direct_message
+                            logger.info(
+                                f"通过 message_id 精确匹配到 Telethon 消息: {telethon_message.id} "
+                                f"(第 {attempt_index}/{direct_match_retries} 次)"
+                            )
+                            _extract_media_attributes(direct_media)
+                            break
+                        logger.info("message_id 命中但媒体特征不匹配，提前降级到历史扫描")
+                        break
+                    except Exception as direct_error:
+                        logger.warning(
+                            f"message_id 精确匹配异常（第 {attempt_index}/{direct_match_retries} 次）: {direct_error}"
                         )
-                        await status_message.edit_text(
-                            "❌ 无法访问消息历史，可能是Telethon会话问题。请联系管理员。"
+                        if attempt_index == 1:
+                            # 首次异常时刷新实体缓存，避免缓存实体失效导致持续失败
+                            self._telethon_target_entity = None
+                            try:
+                                target_entity = await self._get_telethon_target_entity(context, force_refresh=True)
+                            except Exception as refresh_error:
+                                logger.warning(f"刷新 Telethon 目标实体失败: {refresh_error}")
+
+                    if telethon_message:
+                        break
+                    if attempt_index < direct_match_retries:
+                        await asyncio.sleep(min(direct_match_base_delay * attempt_index, 2.5))
+
+            if not telethon_message and source_message_id:
+                logger.warning(
+                    f"message_id={source_message_id} 精确匹配 {direct_match_retries} 次未命中，降级到历史扫描"
+                )
+
+            if not telethon_message:
+                match_attempts = [
+                    {"limit": history_scan_limit, "time_window": history_scan_window, "wait": 1.0},
+                    {
+                        "limit": min(history_scan_limit * 2, 500),
+                        "time_window": max(history_scan_window * 2, 3600),
+                        "wait": 0.0,
+                    },
+                ]
+
+                for attempt_index, attempt in enumerate(match_attempts, start=1):
+                    try:
+                        async for msg in self.user_client.iter_messages(target_entity, limit=attempt["limit"]):
+                            media_to_check = _extract_media_for_match(msg)
+                            if not media_to_check or not hasattr(media_to_check, "size"):
+                                continue
+
+                            # 如果消息ID一致，优先判定命中（单用户批量场景最稳定）
+                            if source_message_id and getattr(msg, "id", None) == source_message_id:
+                                telethon_message = msg
+                                logger.info(
+                                    f"通过历史扫描按 message_id 命中 Telethon 消息: {telethon_message.id} "
+                                    f"(第 {attempt_index} 轮)"
+                                )
+                                _extract_media_attributes(media_to_check)
+                                break
+
+                            if file_size and media_to_check.size != file_size:
+                                continue
+
+                            delta_seconds = _safe_time_delta_seconds(msg.date, bot_message_timestamp)
+                            if delta_seconds > attempt["time_window"]:
+                                continue
+
+                            telethon_message = msg
+                            logger.info(
+                                f"历史扫描匹配成功（第 {attempt_index} 轮）: msg_id={telethon_message.id}, "
+                                f"size={media_to_check.size}, time_delta={delta_seconds:.2f}s"
+                            )
+                            logger.info(f"Telethon 消息完整信息: {telethon_message}")
+                            logger.info(f"Telethon 消息文本属性: '{telethon_message.text}'")
+                            logger.info(f"Telethon 消息原始文本: '{telethon_message.raw_text}'")
+                            _extract_media_attributes(media_to_check)
+                            break
+                    except Exception as scan_error:
+                        flood_wait_seconds = int(getattr(scan_error, "seconds", 0) or 0)
+                        if flood_wait_seconds > 0:
+                            wait_seconds = min(flood_wait_seconds + 1, 30)
+                            logger.warning(
+                                f"历史扫描触发等待（{flood_wait_seconds}s），{wait_seconds}s 后继续: {scan_error}"
+                            )
+                            await asyncio.sleep(wait_seconds)
+                        else:
+                            logger.warning(f"历史扫描第 {attempt_index} 轮异常: {scan_error}")
+
+                    if telethon_message:
+                        break
+
+                    if attempt["wait"] > 0:
+                        logger.warning(
+                            f"第 {attempt_index} 轮未匹配到 Telethon 消息，"
+                            f"{attempt['wait']:.1f} 秒后继续扩大搜索范围"
                         )
-                        return
-
-            async for msg in self.user_client.iter_messages(target_entity, limit=20):
-                # 兼容两种媒体类型: document (视频/文件) 和 audio (作为音频发送)
-                media_to_check = msg.media.document if hasattr(msg.media, 'document') else msg.media
-
-                if media_to_check and hasattr(media_to_check, 'size') and media_to_check.size == file_size:
-                    if abs((msg.date - bot_message_timestamp).total_seconds()) < time_window_seconds:
-                        telethon_message = msg
-                        logger.info(f"找到匹配消息，开始提取媒体属性...")
-                        logger.info(f"Telethon 消息完整信息: {telethon_message}")
-                        logger.info(f"Telethon 消息文本属性: '{telethon_message.text}'")
-                        logger.info(f"Telethon 消息原始文本: '{telethon_message.raw_text}'")
-
-                        # 检查是否为音频并提取元数据
-                        if hasattr(media_to_check, 'attributes'):
-                            logger.info(f"媒体属性列表: {[type(attr).__name__ for attr in media_to_check.attributes]}")
-
-                            for attr in media_to_check.attributes:
-                                logger.info(f"检查属性: {type(attr).__name__} - {attr}")
-
-                                # 音频属性
-                                if isinstance(attr, types.DocumentAttributeAudio):
-                                    if hasattr(attr, 'bitrate'):
-                                        audio_bitrate = attr.bitrate
-                                    if hasattr(attr, 'duration'):
-                                        audio_duration = attr.duration
-                                    logger.info(f"提取到音频元数据: 码率={audio_bitrate}, 时长={audio_duration}")
-
-                                # 视频属性
-                                elif isinstance(attr, types.DocumentAttributeVideo):
-                                    if hasattr(attr, 'w') and hasattr(attr, 'h'):
-                                        video_width = attr.w
-                                        video_height = attr.h
-                                        logger.info(f"提取到视频元数据: 分辨率={video_width}x{video_height}")
-
-                                    if hasattr(attr, 'duration'):
-                                        video_duration = attr.duration
-                                        logger.info(f"提取到视频时长: {video_duration}秒")
-
-                                # 文档属性（可能包含文件名等信息）
-                                elif isinstance(attr, types.DocumentAttributeFilename):
-                                    logger.info(f"提取到文件名: {attr.file_name}")
-                                    # 使用从 Telethon 提取的文件名，如果之前没有获取到文件名
-                                    if not file_name or file_name == 'unknown_file':
-                                        file_name = attr.file_name
-                                        logger.info(f"使用 Telethon 文件名: {file_name}")
-
-                                # 音频属性
-                                if isinstance(attr, types.DocumentAttributeAudio):
-                                    if hasattr(attr, 'bitrate'):
-                                        audio_bitrate = attr.bitrate
-                                    if hasattr(attr, 'duration'):
-                                        audio_duration = attr.duration
-                                    logger.info(f"提取到音频元数据: 码率={audio_bitrate}, 时长={audio_duration}")
-
-                                # 视频属性
-                                elif isinstance(attr, types.DocumentAttributeVideo):
-                                    if hasattr(attr, 'w') and hasattr(attr, 'h'):
-                                        video_width = attr.w
-                                        video_height = attr.h
-                                        logger.info(f"提取到视频元数据: 分辨率={video_width}x{video_height}")
-
-                                    if hasattr(attr, 'duration'):
-                                        video_duration = attr.duration
-                                        logger.info(f"提取到视频时长: {video_duration}秒")
-
-                        break # 找到匹配项，跳出循环
+                        await asyncio.sleep(attempt["wait"])
 
             # 如果还没有文件名，尝试从 Telethon 消息文本中提取
             if (not file_name or file_name == 'unknown_file') and telethon_message:
@@ -11293,54 +11573,86 @@ class TelegramBot:
                         )
                         logger.info(f"✅ 媒体文件下载完成: {downloaded_file}")
                     else:
+                        failure_detail = (
+                            "Failed to fetch media file | "
+                            f"message_id={_safe_text(source_message_id)} | "
+                            f"file_unique_id={_safe_text(file_unique_id)} | "
+                            f"file_name={_shorten(_safe_text(file_name, 'unknown_file'), 60)}"
+                        )
                         await self._update_persisted_task_status(
                             persisted_media_task_id,
                             TaskPersistStatus.ERROR,
-                            "Failed to fetch media file",
+                            failure_detail,
                         )
                         await context.bot.edit_message_text(
-                            text="❌ 下载失败：无法获取文件",
+                            text=f"❌ 下载失败：无法获取文件\n\n{_media_failure_summary()}",
                             chat_id=chat_id,
-                            message_id=status_message.message_id
+                            message_id=status_message.message_id,
+                            parse_mode=None,
                         )
-                        logger.error("❌ 媒体文件下载失败：无法获取文件")
+                        logger.error(f"❌ 媒体文件下载失败：无法获取文件 | {failure_detail}")
 
                 except Exception as e:
                     logger.error(f"❌ 媒体文件下载失败: {e}", exc_info=True)
+                    failure_detail = (
+                        f"Media download failed: {e} | "
+                        f"message_id={_safe_text(source_message_id)} | "
+                        f"file_unique_id={_safe_text(file_unique_id)} | "
+                        f"file_name={_shorten(_safe_text(file_name, 'unknown_file'), 60)}"
+                    )
                     await self._update_persisted_task_status(
                         persisted_media_task_id,
                         TaskPersistStatus.ERROR,
-                        str(e),
+                        failure_detail,
                     )
                     await context.bot.edit_message_text(
-                        text=f"❌ 下载失败: {str(e)}",
+                        text=f"❌ 下载失败: {str(e)}\n\n{_media_failure_summary()}",
                         chat_id=chat_id,
-                        message_id=status_message.message_id
+                        message_id=status_message.message_id,
+                        parse_mode=None,
                     )
             else:
+                failure_detail = (
+                    "No matched telethon message found | "
+                    f"message_id={_safe_text(source_message_id)} | "
+                    f"file_unique_id={_safe_text(file_unique_id)} | "
+                    f"file_name={_shorten(_safe_text(file_name, 'unknown_file'), 60)}"
+                )
                 await self._update_persisted_task_status(
                     persisted_media_task_id,
-                    TaskPersistStatus.ERROR,
-                    "No matched telethon message found",
+                    TaskPersistStatus.FAILED,
+                    failure_detail,
                 )
                 await context.bot.edit_message_text(
-                    text="❌ 无法找到匹配的媒体消息，请重试",
+                    text=(
+                        "❌ 无法找到匹配的媒体消息\n\n"
+                        f"{_media_failure_summary()}\n"
+                        "💡 请稍后重试，或检查代理/网络稳定性。"
+                    ),
                     chat_id=chat_id,
-                    message_id=status_message.message_id
+                    message_id=status_message.message_id,
+                    parse_mode=None,
                 )
-                logger.error("❌ 无法找到匹配的Telethon消息")
+                logger.error(f"❌ 无法找到匹配的Telethon消息 | {failure_detail}")
 
         except Exception as e:
             logger.error(f"❌ 处理媒体消息时出错: {e}", exc_info=True)
+            failure_detail = (
+                f"Process media failed: {e} | "
+                f"message_id={_safe_text(source_message_id)} | "
+                f"file_unique_id={_safe_text(file_unique_id)} | "
+                f"file_name={_shorten(_safe_text(file_name, 'unknown_file'), 60)}"
+            )
             await self._update_persisted_task_status(
                 persisted_media_task_id,
                 TaskPersistStatus.ERROR,
-                str(e),
+                failure_detail,
             )
             await context.bot.edit_message_text(
-                text=f"❌ 处理失败: {str(e)}",
+                text=f"❌ 处理失败: {str(e)}\n\n{_media_failure_summary()}",
                 chat_id=chat_id,
-                message_id=status_message.message_id
+                message_id=status_message.message_id,
+                parse_mode=None,
             )
 
     async def error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -34,6 +34,8 @@ class MediaBatchProcessor:
 
         self.queue: asyncio.Queue[Tuple] = asyncio.Queue(maxsize=max(1, int(queue_maxsize)))
         self._semaphore = asyncio.Semaphore(self.max_concurrent)
+        self._active_workers = 0
+        self._active_lock = asyncio.Lock()
         self._processor_task: Optional[asyncio.Task] = None
         self._running = False
 
@@ -64,8 +66,9 @@ class MediaBatchProcessor:
         message,
         status_message,
         attachment,
+        persisted_task_id: str | None = None,
     ) -> bool:
-        item = (update, context, message, status_message, attachment)
+        item = (update, context, message, status_message, attachment, persisted_task_id)
         try:
             self.queue.put_nowait(item)
             return True
@@ -87,14 +90,29 @@ class MediaBatchProcessor:
 
             asyncio.create_task(self._run_one(item))
 
+    async def get_runtime_metrics(self) -> dict:
+        """Return queue/runtime counters for diagnostics."""
+        async with self._active_lock:
+            active = self._active_workers
+        queued = self.queue.qsize()
+        return {
+            "queued": queued,
+            "active": active,
+            "total": queued + active,
+            "max_concurrent": self.max_concurrent,
+        }
+
     async def _run_one(self, item: Tuple):
-        update, context, _message, status_message, _attachment = item
+        update, context, _message, status_message, _attachment, persisted_task_id = item
         async with self._semaphore:
+            async with self._active_lock:
+                self._active_workers += 1
             try:
                 await asyncio.wait_for(
                     self.bot.download_user_media(
                         update,
                         context,
+                        persisted_task_id=persisted_task_id,
                         from_queue=True,
                         status_message=status_message,
                     ),
@@ -116,3 +134,7 @@ class MediaBatchProcessor:
                         await status_message.edit_text(f"❌ 下载失败：{e}")
                     except Exception:
                         pass
+            finally:
+                async with self._active_lock:
+                    if self._active_workers > 0:
+                        self._active_workers -= 1

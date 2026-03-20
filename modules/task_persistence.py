@@ -210,6 +210,8 @@ class TaskPersistenceManager:
                 task.paused_at = datetime.now().isoformat()
             elif status == TaskPersistStatus.ERROR:
                 task.retry_count += 1
+            elif status in (TaskPersistStatus.FAILED, TaskPersistStatus.CANCELLED):
+                task.completed_at = datetime.now().isoformat()
             
             task.update_timestamp()
             self._save_tasks_unlocked()
