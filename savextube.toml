@@ -66,3 +66,18 @@ mt_aria2c_splits = 16
 # 下载速度限制（0 表示不限制），格式：500K, 1M, 10M
 mt_speed_limit = "0"
 
+[download_queue]
+# 下载队列配置
+# URL 下载最大并发数（推荐 2-5）
+url_max_concurrent = 3
+# URL 下载队列最大长度
+url_queue_maxsize = 200
+# URL 单任务超时时间（秒，默认3600即1小时）
+url_download_timeout = 3600
+# TG 媒体下载最大并发数（推荐 2-5）
+media_max_concurrent = 3
+# TG 媒体下载队列最大长度
+media_queue_maxsize = 200
+# TG 媒体单任务超时时间（秒，默认1800即30分钟）
+media_download_timeout = 1800
+

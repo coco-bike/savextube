@@ -174,6 +174,7 @@ try:
         load_toml_config,
         get_telegram_config,
         get_proxy_config,
+        get_download_queue_config,
         print_config_summary
     )
     CONFIG_READER_AVAILABLE = True
@@ -182,6 +183,7 @@ except ImportError:
     load_toml_config = None
     get_telegram_config = None
     get_proxy_config = None
+    get_download_queue_config = None
     print_config_summary = None
     CONFIG_READER_AVAILABLE = False
 
@@ -448,6 +450,7 @@ from modules.url_extractor import URLExtractor
 from modules.batch_downloader import BatchDownloadProcessor
 from modules.message_handler import TelegramMessageHandler
 from modules.media_batch_processor import MediaBatchProcessor
+from modules.url_download_queue import UrlDownloadQueue
 from modules.task_persistence import TaskPersistStatus, init_persistence
 from modules.task_recovery import init_recovery
 from modules.web_task_manager import get_task_manager, TaskStatus as WebTaskStatus
@@ -1620,22 +1623,11 @@ class VideoDownloader:
     def is_youtube_music_url(self, url: str) -> bool:
         """检查是否为 YouTube Music URL"""
         parsed = urlparse(url)
-        # 检查YouTube Music专用域名
+        # 只检查YouTube Music专用域名
         if parsed.netloc.lower() in [
             "music.youtube.com",
         ]:
             return True
-        
-        # 检查普通YouTube链接但包含播放列表标识（可能是YouTube Music播放列表）
-        if parsed.netloc.lower() in [
-            "youtube.com",
-            "www.youtube.com",
-            "youtu.be",
-            "m.youtube.com",
-        ]:
-            # 检查URL中是否包含播放列表参数
-            if 'list=' in url:
-                return True
         
         return False
 
@@ -2741,6 +2733,12 @@ class VideoDownloader:
             logger=logger,
         )
         ydl_opts = enrich_single_video_ydl_options(self, url=url, ydl_opts=ydl_opts, logger=logger)
+
+        # 应用多线程下载优化（aria2c / 并发分片）
+        mt = getattr(self, "multithread_downloader", None)
+        if mt and hasattr(mt, "get_yt_dlp_options"):
+            ydl_opts = mt.get_yt_dlp_options(ydl_opts)
+            logger.info("🚀 已应用多线程下载优化")
 
         instagram_result = await try_instagram_special_download(
             self,
@@ -4385,6 +4383,12 @@ class VideoDownloader:
         elif hasattr(self, 'x_cookies_path') and self.x_cookies_path and os.path.exists(self.x_cookies_path):
             enhanced_opts['cookiefile'] = self.x_cookies_path
 
+        # 应用多线程下载优化（aria2c / 并发分片）
+        mt = getattr(self, "multithread_downloader", None)
+        if mt and hasattr(mt, "get_yt_dlp_options"):
+            enhanced_opts = mt.get_yt_dlp_options(enhanced_opts)
+            logger.info("🚀 增强配置已应用多线程下载优化")
+
         return enhanced_opts
 
     def _add_danmaku_options(self, ydl_opts, url):
@@ -4972,9 +4976,10 @@ class VideoDownloader:
 
 
 class TelegramBot:
-    def __init__(self, token: str, downloader: VideoDownloader):
+    def __init__(self, token: str, downloader: VideoDownloader, toml_config: dict = None):
         self.token = token
         self.downloader = downloader
+        self.toml_config = toml_config or {}
         # 设置下载器对bot的引用，以便访问设置
         self.downloader.bot = self
         self.application = None
@@ -4989,11 +4994,16 @@ class TelegramBot:
             logger.error(f"❌ 消息处理器初始化失败：{e}")
             self.message_handler = None
 
-        # 初始化媒体批量下载处理器
+        # 初始化媒体批量下载处理器和 URL 下载队列
+        queue_cfg = {}
+        if get_download_queue_config and self.toml_config:
+            queue_cfg = get_download_queue_config(self.toml_config)
+            logger.info(f"📋 从 TOML 配置读取下载队列参数: {queue_cfg}")
+
         try:
-            media_max_concurrent = int(os.getenv("MEDIA_MAX_CONCURRENT", "3"))
-            media_queue_maxsize = int(os.getenv("MEDIA_QUEUE_MAXSIZE", "200"))
-            media_download_timeout = float(os.getenv("MEDIA_DOWNLOAD_TIMEOUT", "1800"))
+            media_max_concurrent = int(queue_cfg.get("media_max_concurrent", 3))
+            media_queue_maxsize = int(queue_cfg.get("media_queue_maxsize", 200))
+            media_download_timeout = float(queue_cfg.get("media_download_timeout", 1800))
             self.media_batch_processor = MediaBatchProcessor(
                 self,
                 max_concurrent=media_max_concurrent,
@@ -5005,6 +5015,23 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"❌ 媒体批量处理器初始化失败：{e}")
             self.media_batch_processor = None
+
+        # 初始化 URL 下载队列处理器
+        try:
+            url_max_concurrent = int(queue_cfg.get("url_max_concurrent", 3))
+            url_queue_maxsize = int(queue_cfg.get("url_queue_maxsize", 200))
+            url_download_timeout = float(queue_cfg.get("url_download_timeout", 3600))
+            self.url_download_queue = UrlDownloadQueue(
+                self,
+                max_concurrent=url_max_concurrent,
+                timeout=3.0,
+                queue_maxsize=url_queue_maxsize,
+                download_timeout=url_download_timeout,
+            )
+            logger.info("✅ URL 下载队列处理器初始化成功")
+        except Exception as e:
+            logger.error(f"❌ URL 下载队列处理器初始化失败：{e}")
+            self.url_download_queue = None
 
         # 初始化配置管理器（仅使用数据库）
         try:
@@ -5976,6 +6003,11 @@ class TelegramBot:
         if self.media_batch_processor:
             self.media_batch_processor.start()
             logger.info("🚀 媒体批量下载处理器已启动")
+
+        # 启动 URL 下载队列处理器
+        if self.url_download_queue:
+            self.url_download_queue.start()
+            logger.info("🚀 URL 下载队列处理器已启动")
         
         logger.info("启动 Telegram Bot (PTB)...")
 
@@ -6961,6 +6993,32 @@ class TelegramBot:
         except Exception as e:
             logger.warning(f"获取熔断缓存状态失败: {e}")
 
+        try:
+            if self.url_download_queue:
+                url_metrics = await self.url_download_queue.get_runtime_metrics()
+                lines.extend(
+                    [
+                        "",
+                        "<b>URL 下载队列</b>",
+                        f"• 排队中: {url_metrics['queued']}",
+                        f"• 活跃下载: {url_metrics['active']}",
+                        f"• 最大并发: {url_metrics['max_concurrent']}",
+                    ]
+                )
+            if self.media_batch_processor:
+                media_metrics = await self.media_batch_processor.get_runtime_metrics()
+                lines.extend(
+                    [
+                        "",
+                        "<b>TG 媒体队列</b>",
+                        f"• 排队中: {media_metrics['queued']}",
+                        f"• 活跃下载: {media_metrics['active']}",
+                        f"• 最大并发: {media_metrics['max_concurrent']}",
+                    ]
+                )
+        except Exception as e:
+            logger.warning(f"获取队列状态失败: {e}")
+
         await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
     async def clear_cache_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -7055,15 +7113,24 @@ class TelegramBot:
 
                     recovery_update = _RecoveryUpdate(user_id, chat_id)
                     recovery_context = _RecoveryContext(context.bot)
-                    asyncio.create_task(
-                        self._process_download_async(
+                    if self.url_download_queue:
+                        await self.url_download_queue.add_to_queue(
                             recovery_update,
                             recovery_context,
                             cached.url,
                             recovery_notice,
                             persisted_task_id=None,
                         )
-                    )
+                    else:
+                        asyncio.create_task(
+                            self._process_download_async(
+                                recovery_update,
+                                recovery_context,
+                                cached.url,
+                                recovery_notice,
+                                persisted_task_id=None,
+                            )
+                        )
                     recovered_circuit += 1
                 except Exception as e:
                     logger.error(f"恢复熔断缓存任务失败 {cached.task_id}: {e}")
@@ -7220,16 +7287,24 @@ class TelegramBot:
         status_message = await message.reply_text("🚀 正在处理您的请求...")
         persisted_task_id = await self._create_persisted_url_task(update, url)
 
-        # 异步处理下载任务，不阻塞响应
-        asyncio.create_task(
-            self._process_download_async(
-                update,
-                context,
-                url,
-                status_message,
+        # 异步处理下载任务，通过队列调度
+        if self.url_download_queue:
+            queued = await self.url_download_queue.add_to_queue(
+                update, context, url, status_message,
                 persisted_task_id=persisted_task_id,
             )
-        )
+            if queued:
+                metrics = await self.url_download_queue.get_runtime_metrics()
+                logger.info(f"📥 URL 下载已加入队列 | 队列={metrics['queued']} 活跃={metrics['active']}")
+            else:
+                await status_message.edit_text("❌ 下载队列已满，请稍后再试。", parse_mode=None)
+        else:
+            asyncio.create_task(
+                self._process_download_async(
+                    update, context, url, status_message,
+                    persisted_task_id=persisted_task_id,
+                )
+            )
 
     async def _handle_search_command(self, message, context):
         """处理搜索命令 /search ncm 关键词"""
@@ -10746,15 +10821,24 @@ class TelegramBot:
 
                 recovery_update = _RecoveryUpdate(user_id, chat_id)
                 recovery_context = _RecoveryContext(self.application.bot)
-                asyncio.create_task(
-                    self._process_download_async(
+                if self.url_download_queue:
+                    await self.url_download_queue.add_to_queue(
                         recovery_update,
                         recovery_context,
                         url,
                         status_message,
                         persisted_task_id=getattr(task, "task_id", None),
                     )
-                )
+                else:
+                    asyncio.create_task(
+                        self._process_download_async(
+                            recovery_update,
+                            recovery_context,
+                            url,
+                            status_message,
+                            persisted_task_id=getattr(task, "task_id", None),
+                        )
+                    )
                 return True
 
             if task_kind == "media":
@@ -12066,7 +12150,7 @@ async def main():
     downloader = VideoDownloader(
         download_path, x_cookies_path, b_cookies_path, youtube_cookies_path, douyin_cookies_path, kuaishou_cookies_path, None, instagram_cookies_path
     )
-    bot = TelegramBot(bot_token, downloader)
+    bot = TelegramBot(bot_token, downloader, toml_config=toml_config)
 
     # 将 bot 实例注册到 Flask 应用，供 Web 接口使用
     app._bot_instance = bot

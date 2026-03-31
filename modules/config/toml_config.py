@@ -242,6 +242,27 @@ def get_youtube_config(config: Dict[str, Any]) -> Dict[str, Any]:
         'convert_to_mp4': youtube_config.get('youtube_convert_to_mp4', True),
     }
 
+def get_download_queue_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    从配置中提取下载队列相关配置
+
+    Args:
+        config: 完整的配置字典
+
+    Returns:
+        下载队列配置字典
+    """
+    queue_config = config.get('download_queue', {})
+
+    return {
+        'url_max_concurrent': int(queue_config.get('url_max_concurrent', 3)),
+        'url_queue_maxsize': int(queue_config.get('url_queue_maxsize', 200)),
+        'url_download_timeout': float(queue_config.get('url_download_timeout', 3600)),
+        'media_max_concurrent': int(queue_config.get('media_max_concurrent', 3)),
+        'media_queue_maxsize': int(queue_config.get('media_queue_maxsize', 200)),
+        'media_download_timeout': float(queue_config.get('media_download_timeout', 1800)),
+    }
+
 def get_config_with_fallback(toml_config: Dict[str, Any], env_var: str, toml_key: str, default: str = "") -> str:
     """
     获取配置值，支持 TOML 配置和环境变量回退
