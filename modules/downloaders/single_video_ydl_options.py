@@ -116,7 +116,8 @@ def build_single_video_ydl_options(downloader, *, url: str, outtmpl: str, no_pla
         "merge_output_format": merge_format,
         "noplaylist": noplaylist_setting,
         "nocheckcertificate": True,
-        "ignoreerrors": True,
+        # 单视频必须显式暴露失败，避免误判成功后再进入“找不到文件”
+        "ignoreerrors": False,
         "logtostderr": True,
         "quiet": False,
         "no_warnings": False,

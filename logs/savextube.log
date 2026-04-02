@@ -69,3 +69,521 @@ Attempt 4 at connecting failed: TimeoutError:
 2026-03-17 20:14:30 - savextube - INFO - 🔧 使用环境变量配置
 2026-03-17 20:14:30 - savextube - ERROR - ❌ 请在 TOML 配置文件或环境变量中设置 TELEGRAM_BOT_TOKEN
 2026-03-17 20:14:30 - savextube - INFO - 机器人已停止。
+2026-04-02 16:31:10 - modules.config.toml_config - INFO - 📖 正在读取配置文件: savextube.toml
+2026-04-02 16:31:10 - modules.config.toml_config - INFO - ✅ 成功读取配置文件，包含 10 个配置段
+2026-04-02 16:31:10 - modules.config.toml_config - INFO -    📁 配置段: telegram
+2026-04-02 16:31:10 - modules.config.toml_config - INFO -    📁 配置段: proxy
+2026-04-02 16:31:10 - modules.config.toml_config - INFO -    📁 配置段: netease
+2026-04-02 16:31:10 - modules.config.toml_config - INFO -    📁 配置段: apple_music
+2026-04-02 16:31:10 - modules.config.toml_config - INFO -    📁 配置段: bilibili
+2026-04-02 16:31:10 - modules.config.toml_config - INFO -    📁 配置段: qbittorrent
+2026-04-02 16:31:10 - modules.config.toml_config - INFO -    📁 配置段: logging
+2026-04-02 16:31:10 - modules.config.toml_config - INFO -    📁 配置段: youtube
+2026-04-02 16:31:10 - modules.config.toml_config - INFO -    📁 配置段: multithread
+2026-04-02 16:31:10 - modules.config.toml_config - INFO -    📁 配置段: download_queue
+2026-04-02 16:31:10 - modules.downloaders.multithread_downloader - WARNING - ⚠️ aria2c 未安装，将使用 yt-dlp 内置下载
+2026-04-02 16:31:10 - modules.downloaders.multithread_downloader - INFO - 💡 安装 aria2c 可以获得更快的下载速度：
+2026-04-02 16:31:10 - modules.downloaders.multithread_downloader - INFO -    Ubuntu/Debian: sudo apt install aria2
+2026-04-02 16:31:10 - modules.downloaders.multithread_downloader - INFO -    CentOS/RHEL: sudo yum install aria2
+2026-04-02 16:31:10 - modules.downloaders.multithread_downloader - INFO -    macOS: brew install aria2
+2026-04-02 16:31:10 - savextube - INFO - ✅ 多线程下载器初始化成功（线程数：16, 并发数：3）
+2026-04-02 16:31:10 - savextube - INFO - ✅ 模块化下载器初始化成功
+2026-04-02 16:31:10 - modules.downloaders.instagram_downloader - WARNING - ⚠️ Instagram cookies 文件不存在: /app/cookies/instagram_cookies.txt
+2026-04-02 16:31:10 - modules.downloaders.instagram_downloader - ERROR - ❌ gallery-dl 未安装或不可用
+2026-04-02 16:31:10 - savextube - INFO - ✅ Instagram 下载器初始化成功
+2026-04-02 16:31:10 - modules.downloaders.applemusic_downloader - INFO - 🐳 检测到 Docker 环境，启用特殊优化
+2026-04-02 16:31:10 - modules.downloaders.applemusic_downloader - ERROR - ❌ gamdl 未安装或不可用
+2026-04-02 16:31:10 - modules.downloaders.applemusic_downloader - INFO - 💡 请安装 gamdl: pip install gamdl
+2026-04-02 16:31:10 - savextube - WARNING - ⚠️ Apple Music 下载器初始化失败：gamdl 不可用
+2026-04-02 16:31:10 - savextube - INFO - 视频格式转换: 开启
+2026-04-02 16:31:10 - savextube - INFO - X 下载路径: D:\MyProjects\savextube\downloads\X
+2026-04-02 16:31:10 - savextube - INFO - YouTube 下载路径: D:\MyProjects\savextube\downloads\YouTube
+2026-04-02 16:31:10 - savextube - INFO - Xvideos 下载路径: D:\MyProjects\savextube\downloads\Xvideos
+2026-04-02 16:31:10 - savextube - INFO - Pornhub 下载路径: D:\MyProjects\savextube\downloads\Pornhub
+2026-04-02 16:31:10 - savextube - INFO - Bilibili 下载路径: D:\MyProjects\savextube\downloads\Bilibili
+2026-04-02 16:31:10 - savextube - INFO - 音乐下载路径: D:\MyProjects\savextube\downloads\Music
+2026-04-02 16:31:10 - savextube - INFO - Telegram 文件下载路径: D:\MyProjects\savextube\downloads\Telegram
+2026-04-02 16:31:10 - savextube - INFO - Telegraph 文件下载路径: D:\MyProjects\savextube\downloads\Telegraph
+2026-04-02 16:31:10 - savextube - INFO - 抖音下载路径: D:\MyProjects\savextube\downloads\Douyin
+2026-04-02 16:31:10 - savextube - INFO - 快手下载路径: D:\MyProjects\savextube\downloads\Kuaishou
+2026-04-02 16:31:10 - savextube - INFO - Facebook下载路径: D:\MyProjects\savextube\downloads\Facebook
+2026-04-02 16:31:10 - savextube - INFO - 小红书下载路径: D:\MyProjects\savextube\downloads\Xiaohongshu
+2026-04-02 16:31:10 - savextube - INFO - 微博下载路径: D:\MyProjects\savextube\downloads\Weibo
+2026-04-02 16:31:10 - savextube - INFO - Instagram下载路径: D:\MyProjects\savextube\downloads\Instagram
+2026-04-02 16:31:10 - savextube - INFO - TikTok下载路径: D:\MyProjects\savextube\downloads\TikTok
+2026-04-02 16:31:10 - savextube - INFO - 网易云音乐下载路径: D:\MyProjects\savextube\downloads\NeteaseCloudMusic
+2026-04-02 16:31:10 - savextube - INFO - QQ音乐下载路径: D:\MyProjects\savextube\downloads\QQMusic
+2026-04-02 16:31:10 - savextube - INFO - YouTube Music下载路径: \downloads\YouTubeMusic
+2026-04-02 16:31:10 - savextube - INFO - Apple Music下载路径: D:\MyProjects\savextube\downloads\AppleMusic
+2026-04-02 16:31:10 - savextube - INFO - 代理服务器未配置，将直接连接
+2026-04-02 16:31:10 - savextube - INFO - yt-dlp 直接连接
+2026-04-02 16:31:10 - savextube - INFO - ⚠️ 未设置 GALLERY_DL_DOWNLOAD_PATH 环境变量，使用默认值: D:\MyProjects\savextube\downloads\gallery
+2026-04-02 16:31:10 - savextube - INFO - 🎯 使用 GALLERY_DL_DOWNLOAD_PATH: D:\MyProjects\savextube\downloads\gallery
+2026-04-02 16:31:10 - savextube - INFO - 🍪 使用初始化参数中的X cookies: None
+2026-04-02 16:31:10 - savextube - INFO - 已成功创建 gallery-dl.conf 配置文件: D:\MyProjects\savextube\downloads\gallery-dl.conf
+2026-04-02 16:31:10 - savextube - INFO - 配置文件内容:
+{
+  "base-directory": "D:\\MyProjects\\savextube\\downloads\\gallery",
+  "extractor": {
+    "twitter": {
+      "cookies": null
+    }
+  },
+  "downloader": {
+    "http": {
+      "timeout": 120,
+      "retries": 15,
+      "sleep": 5,
+      "verify": false,
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br",
+        "DNT": "1",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "cross-site",
+        "Sec-Fetch-User": "?1",
+        "Cache-Control": "max-age=0",
+        "Referer": "https://telegra.ph/",
+        "Origin": "https://telegra.ph"
+      },
+      "max_retries": 15,
+      "retry_delay": 5,
+      "connection_timeout": 60,
+      "read_timeout": 120,
+      "chunk_size": 8192,
+      "stream": true,
+      "allow_redirects": true,
+      "max_redirects": 10
+    }
+  }
+}
+2026-04-02 16:31:10 - netease_downloader - WARNING - ⚠️ 未找到网易云cookies配置
+2026-04-02 16:31:10 - netease_downloader - WARNING - 💡 请设置环境变量:
+2026-04-02 16:31:10 - netease_downloader - WARNING -    NCM_COOKIE_FILE=/path/to/ncm_cookies.txt
+2026-04-02 16:31:10 - netease_downloader - WARNING -    或 NCM_COOKIES='MUSIC_U=xxx; __csrf=xxx'
+2026-04-02 16:31:10 - netease_downloader - WARNING - 📝 将使用游客模式，可能无法下载受版权保护的音乐
+2026-04-02 16:31:10 - netease_downloader - INFO - 🔧 元数据初始化: METADATA_AVAILABLE = True
+2026-04-02 16:31:10 - modules.downloaders.music_metadata - INFO - ✅ 检测到 mutagen 库
+2026-04-02 16:31:10 - modules.downloaders.music_metadata - INFO - ✅ 检测到 eyed3 库
+2026-04-02 16:31:10 - modules.downloaders.music_metadata - INFO - ✅ 检测到 tinytag 库（只读）
+2026-04-02 16:31:10 - modules.downloaders.music_metadata - INFO - 🔧 可用的音频标签库: mutagen, eyed3, tinytag
+2026-04-02 16:31:10 - netease_downloader - INFO - ✅ 音乐元数据管理器初始化成功
+2026-04-02 16:31:10 - netease_downloader - INFO - 🔧 可用的音频标签库: mutagen, eyed3, tinytag
+2026-04-02 16:31:10 - netease_downloader - INFO - 🎤 歌词下载功能已启用
+2026-04-02 16:31:10 - netease_downloader - INFO - 🔧 网易云音乐配置:
+2026-04-02 16:31:10 - netease_downloader - INFO -   - 目录结构格式: {AlbumName}
+2026-04-02 16:31:10 - netease_downloader - INFO -   - 专辑文件夹格式: {AlbumName}
+2026-04-02 16:31:10 - netease_downloader - INFO -   - 歌曲文件名格式: {SongName}
+2026-04-02 16:31:10 - netease_downloader - INFO - 支持的占位符:
+2026-04-02 16:31:10 - netease_downloader - INFO -   - 目录结构: {ArtistName}, {AlbumName}
+2026-04-02 16:31:10 - netease_downloader - INFO -   - 专辑文件夹: {AlbumName}, {ReleaseDate}
+2026-04-02 16:31:10 - netease_downloader - INFO -   - 歌曲文件名: {SongNumber}, {ArtistName}, {SongName}
+2026-04-02 16:31:10 - savextube - INFO - 🎵 网易云音乐下载器初始化成功 (模块: d:\MyProjects\savextube\modules\downloaders\neteasecloud_music.py)
+2026-04-02 16:31:10 - savextube - INFO - 🎵 QQ音乐下载器初始化成功 (模块: qqmusic_downloader.py)
+2026-04-02 16:31:10 - modules.downloaders.music_metadata - INFO - ✅ 检测到 mutagen 库
+2026-04-02 16:31:10 - modules.downloaders.music_metadata - INFO - ✅ 检测到 eyed3 库
+2026-04-02 16:31:10 - modules.downloaders.music_metadata - INFO - ✅ 检测到 tinytag 库（只读）
+2026-04-02 16:31:10 - modules.downloaders.music_metadata - INFO - 🔧 可用的音频标签库: mutagen, eyed3, tinytag
+2026-04-02 16:31:10 - youtube_music_downloader - INFO - ✅ 音乐元数据管理器初始化成功
+2026-04-02 16:31:10 - youtube_music_downloader - WARNING - ⚠️ 未找到 YouTube cookies 文件，某些受限内容可能无法下载
+2026-04-02 16:31:10 - youtube_music_downloader - INFO - 🎵 YouTube Music 下载器初始化完成
+2026-04-02 16:31:10 - youtube_music_downloader - INFO - 🔧 配置: 并发=3, 重试=3, 超时=300s
+2026-04-02 16:31:10 - youtube_music_downloader - INFO - 🎯 音质: best, ID标签: False
+2026-04-02 16:31:10 - savextube - INFO - 🎵 YouTube Music下载器初始化成功 (模块: youtubemusic_downloader.py)
+2026-04-02 16:31:10 - savextube - INFO - 🚀 [DOWNLOAD_VIDEO] 函数被调用，URL: https://youtu.be/rIcd5zZqTno?si=OABgizCU5xM6Cl9I
+2026-04-02 16:31:10 - savextube - INFO - 🚀 [DOWNLOAD_VIDEO] message_updater类型: <class 'function'>
+2026-04-02 16:31:10 - savextube - INFO - 🚀 [DOWNLOAD_VIDEO] message_updater是否为None: False
+2026-04-02 16:31:10 - savextube - INFO - 🔄 开始URL重定向检测: https://youtu.be/rIcd5zZqTno?si=OABgizCU5xM6Cl9I
+2026-04-02 16:31:13 - savextube - INFO - URL重定向检测失败: ERROR: [youtube] rIcd5zZqTno: Sign in to confirm you’re not a bot. Use --cookies-from-browser or --cookies for the authentication. See  https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp  for how to manually pass cookies. Also see  https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies  for tips on effectively exporting YouTube cookies
+2026-04-02 16:31:13 - savextube - INFO - 🔍 download_video 开始处理URL: https://youtu.be/rIcd5zZqTno?si=OABgizCU5xM6Cl9I
+2026-04-02 16:31:13 - savextube - INFO - 🔍 自动下载全集模式: 关闭
+2026-04-02 16:31:39 - modules.config.toml_config - INFO - 📖 正在读取配置文件: savextube.toml
+2026-04-02 16:31:39 - modules.config.toml_config - INFO - ✅ 成功读取配置文件，包含 10 个配置段
+2026-04-02 16:31:39 - modules.config.toml_config - INFO -    📁 配置段: telegram
+2026-04-02 16:31:39 - modules.config.toml_config - INFO -    📁 配置段: proxy
+2026-04-02 16:31:39 - modules.config.toml_config - INFO -    📁 配置段: netease
+2026-04-02 16:31:39 - modules.config.toml_config - INFO -    📁 配置段: apple_music
+2026-04-02 16:31:39 - modules.config.toml_config - INFO -    📁 配置段: bilibili
+2026-04-02 16:31:39 - modules.config.toml_config - INFO -    📁 配置段: qbittorrent
+2026-04-02 16:31:39 - modules.config.toml_config - INFO -    📁 配置段: logging
+2026-04-02 16:31:39 - modules.config.toml_config - INFO -    📁 配置段: youtube
+2026-04-02 16:31:39 - modules.config.toml_config - INFO -    📁 配置段: multithread
+2026-04-02 16:31:39 - modules.config.toml_config - INFO -    📁 配置段: download_queue
+2026-04-02 16:31:39 - modules.downloaders.multithread_downloader - WARNING - ⚠️ aria2c 未安装，将使用 yt-dlp 内置下载
+2026-04-02 16:31:39 - modules.downloaders.multithread_downloader - INFO - 💡 安装 aria2c 可以获得更快的下载速度：
+2026-04-02 16:31:39 - modules.downloaders.multithread_downloader - INFO -    Ubuntu/Debian: sudo apt install aria2
+2026-04-02 16:31:39 - modules.downloaders.multithread_downloader - INFO -    CentOS/RHEL: sudo yum install aria2
+2026-04-02 16:31:39 - modules.downloaders.multithread_downloader - INFO -    macOS: brew install aria2
+2026-04-02 16:31:39 - savextube - INFO - ✅ 多线程下载器初始化成功（线程数：16, 并发数：3）
+2026-04-02 16:31:39 - savextube - INFO - ✅ 模块化下载器初始化成功
+2026-04-02 16:31:39 - modules.downloaders.instagram_downloader - WARNING - ⚠️ Instagram cookies 文件不存在: /app/cookies/instagram_cookies.txt
+2026-04-02 16:31:39 - modules.downloaders.instagram_downloader - ERROR - ❌ gallery-dl 未安装或不可用
+2026-04-02 16:31:39 - savextube - INFO - ✅ Instagram 下载器初始化成功
+2026-04-02 16:31:39 - modules.downloaders.applemusic_downloader - INFO - 🐳 检测到 Docker 环境，启用特殊优化
+2026-04-02 16:31:39 - modules.downloaders.applemusic_downloader - ERROR - ❌ gamdl 未安装或不可用
+2026-04-02 16:31:39 - modules.downloaders.applemusic_downloader - INFO - 💡 请安装 gamdl: pip install gamdl
+2026-04-02 16:31:39 - savextube - WARNING - ⚠️ Apple Music 下载器初始化失败：gamdl 不可用
+2026-04-02 16:31:39 - savextube - INFO - 视频格式转换: 开启
+2026-04-02 16:31:39 - savextube - INFO - X 下载路径: D:\MyProjects\savextube\downloads\X
+2026-04-02 16:31:39 - savextube - INFO - YouTube 下载路径: D:\MyProjects\savextube\downloads\YouTube
+2026-04-02 16:31:39 - savextube - INFO - Xvideos 下载路径: D:\MyProjects\savextube\downloads\Xvideos
+2026-04-02 16:31:39 - savextube - INFO - Pornhub 下载路径: D:\MyProjects\savextube\downloads\Pornhub
+2026-04-02 16:31:39 - savextube - INFO - Bilibili 下载路径: D:\MyProjects\savextube\downloads\Bilibili
+2026-04-02 16:31:39 - savextube - INFO - 音乐下载路径: D:\MyProjects\savextube\downloads\Music
+2026-04-02 16:31:39 - savextube - INFO - Telegram 文件下载路径: D:\MyProjects\savextube\downloads\Telegram
+2026-04-02 16:31:39 - savextube - INFO - Telegraph 文件下载路径: D:\MyProjects\savextube\downloads\Telegraph
+2026-04-02 16:31:39 - savextube - INFO - 抖音下载路径: D:\MyProjects\savextube\downloads\Douyin
+2026-04-02 16:31:39 - savextube - INFO - 快手下载路径: D:\MyProjects\savextube\downloads\Kuaishou
+2026-04-02 16:31:39 - savextube - INFO - Facebook下载路径: D:\MyProjects\savextube\downloads\Facebook
+2026-04-02 16:31:39 - savextube - INFO - 小红书下载路径: D:\MyProjects\savextube\downloads\Xiaohongshu
+2026-04-02 16:31:39 - savextube - INFO - 微博下载路径: D:\MyProjects\savextube\downloads\Weibo
+2026-04-02 16:31:39 - savextube - INFO - Instagram下载路径: D:\MyProjects\savextube\downloads\Instagram
+2026-04-02 16:31:39 - savextube - INFO - TikTok下载路径: D:\MyProjects\savextube\downloads\TikTok
+2026-04-02 16:31:39 - savextube - INFO - 网易云音乐下载路径: D:\MyProjects\savextube\downloads\NeteaseCloudMusic
+2026-04-02 16:31:39 - savextube - INFO - QQ音乐下载路径: D:\MyProjects\savextube\downloads\QQMusic
+2026-04-02 16:31:39 - savextube - INFO - YouTube Music下载路径: \downloads\YouTubeMusic
+2026-04-02 16:31:39 - savextube - INFO - Apple Music下载路径: D:\MyProjects\savextube\downloads\AppleMusic
+2026-04-02 16:31:39 - savextube - INFO - 代理服务器未配置，将直接连接
+2026-04-02 16:31:39 - savextube - INFO - yt-dlp 直接连接
+2026-04-02 16:31:39 - savextube - INFO - ⚠️ 未设置 GALLERY_DL_DOWNLOAD_PATH 环境变量，使用默认值: D:\MyProjects\savextube\downloads\gallery
+2026-04-02 16:31:39 - savextube - INFO - 🎯 使用 GALLERY_DL_DOWNLOAD_PATH: D:\MyProjects\savextube\downloads\gallery
+2026-04-02 16:31:39 - savextube - INFO - 🍪 使用初始化参数中的X cookies: None
+2026-04-02 16:31:39 - savextube - INFO - 已成功创建 gallery-dl.conf 配置文件: D:\MyProjects\savextube\downloads\gallery-dl.conf
+2026-04-02 16:31:39 - savextube - INFO - 配置文件内容:
+{
+  "base-directory": "D:\\MyProjects\\savextube\\downloads\\gallery",
+  "extractor": {
+    "twitter": {
+      "cookies": null
+    }
+  },
+  "downloader": {
+    "http": {
+      "timeout": 120,
+      "retries": 15,
+      "sleep": 5,
+      "verify": false,
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br",
+        "DNT": "1",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "cross-site",
+        "Sec-Fetch-User": "?1",
+        "Cache-Control": "max-age=0",
+        "Referer": "https://telegra.ph/",
+        "Origin": "https://telegra.ph"
+      },
+      "max_retries": 15,
+      "retry_delay": 5,
+      "connection_timeout": 60,
+      "read_timeout": 120,
+      "chunk_size": 8192,
+      "stream": true,
+      "allow_redirects": true,
+      "max_redirects": 10
+    }
+  }
+}
+2026-04-02 16:31:39 - netease_downloader - WARNING - ⚠️ 未找到网易云cookies配置
+2026-04-02 16:31:39 - netease_downloader - WARNING - 💡 请设置环境变量:
+2026-04-02 16:31:39 - netease_downloader - WARNING -    NCM_COOKIE_FILE=/path/to/ncm_cookies.txt
+2026-04-02 16:31:39 - netease_downloader - WARNING -    或 NCM_COOKIES='MUSIC_U=xxx; __csrf=xxx'
+2026-04-02 16:31:39 - netease_downloader - WARNING - 📝 将使用游客模式，可能无法下载受版权保护的音乐
+2026-04-02 16:31:39 - netease_downloader - INFO - 🔧 元数据初始化: METADATA_AVAILABLE = True
+2026-04-02 16:31:39 - modules.downloaders.music_metadata - INFO - ✅ 检测到 mutagen 库
+2026-04-02 16:31:39 - modules.downloaders.music_metadata - INFO - ✅ 检测到 eyed3 库
+2026-04-02 16:31:39 - modules.downloaders.music_metadata - INFO - ✅ 检测到 tinytag 库（只读）
+2026-04-02 16:31:39 - modules.downloaders.music_metadata - INFO - 🔧 可用的音频标签库: mutagen, eyed3, tinytag
+2026-04-02 16:31:39 - netease_downloader - INFO - ✅ 音乐元数据管理器初始化成功
+2026-04-02 16:31:39 - netease_downloader - INFO - 🔧 可用的音频标签库: mutagen, eyed3, tinytag
+2026-04-02 16:31:39 - netease_downloader - INFO - 🎤 歌词下载功能已启用
+2026-04-02 16:31:39 - netease_downloader - INFO - 🔧 网易云音乐配置:
+2026-04-02 16:31:39 - netease_downloader - INFO -   - 目录结构格式: {AlbumName}
+2026-04-02 16:31:39 - netease_downloader - INFO -   - 专辑文件夹格式: {AlbumName}
+2026-04-02 16:31:39 - netease_downloader - INFO -   - 歌曲文件名格式: {SongName}
+2026-04-02 16:31:39 - netease_downloader - INFO - 支持的占位符:
+2026-04-02 16:31:39 - netease_downloader - INFO -   - 目录结构: {ArtistName}, {AlbumName}
+2026-04-02 16:31:39 - netease_downloader - INFO -   - 专辑文件夹: {AlbumName}, {ReleaseDate}
+2026-04-02 16:31:39 - netease_downloader - INFO -   - 歌曲文件名: {SongNumber}, {ArtistName}, {SongName}
+2026-04-02 16:31:39 - savextube - INFO - 🎵 网易云音乐下载器初始化成功 (模块: d:\MyProjects\savextube\modules\downloaders\neteasecloud_music.py)
+2026-04-02 16:31:39 - savextube - INFO - 🎵 QQ音乐下载器初始化成功 (模块: qqmusic_downloader.py)
+2026-04-02 16:31:39 - modules.downloaders.music_metadata - INFO - ✅ 检测到 mutagen 库
+2026-04-02 16:31:39 - modules.downloaders.music_metadata - INFO - ✅ 检测到 eyed3 库
+2026-04-02 16:31:39 - modules.downloaders.music_metadata - INFO - ✅ 检测到 tinytag 库（只读）
+2026-04-02 16:31:39 - modules.downloaders.music_metadata - INFO - 🔧 可用的音频标签库: mutagen, eyed3, tinytag
+2026-04-02 16:31:39 - youtube_music_downloader - INFO - ✅ 音乐元数据管理器初始化成功
+2026-04-02 16:31:39 - youtube_music_downloader - WARNING - ⚠️ 未找到 YouTube cookies 文件，某些受限内容可能无法下载
+2026-04-02 16:31:39 - youtube_music_downloader - INFO - 🎵 YouTube Music 下载器初始化完成
+2026-04-02 16:31:39 - youtube_music_downloader - INFO - 🔧 配置: 并发=3, 重试=3, 超时=300s
+2026-04-02 16:31:39 - youtube_music_downloader - INFO - 🎯 音质: best, ID标签: False
+2026-04-02 16:31:39 - savextube - INFO - 🎵 YouTube Music下载器初始化成功 (模块: youtubemusic_downloader.py)
+2026-04-02 16:31:39 - savextube - INFO - 🚀 [DOWNLOAD_VIDEO] 函数被调用，URL: https://youtu.be/rIcd5zZqTno?si=OABgizCU5xM6Cl9I
+2026-04-02 16:31:39 - savextube - INFO - 🚀 [DOWNLOAD_VIDEO] message_updater类型: <class 'function'>
+2026-04-02 16:31:39 - savextube - INFO - 🚀 [DOWNLOAD_VIDEO] message_updater是否为None: False
+2026-04-02 16:31:39 - savextube - INFO - 🔄 开始URL重定向检测: https://youtu.be/rIcd5zZqTno?si=OABgizCU5xM6Cl9I
+2026-04-02 16:31:41 - savextube - INFO - URL重定向检测失败: ERROR: [youtube] rIcd5zZqTno: Sign in to confirm you’re not a bot. Use --cookies-from-browser or --cookies for the authentication. See  https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp  for how to manually pass cookies. Also see  https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies  for tips on effectively exporting YouTube cookies
+2026-04-02 16:31:41 - savextube - INFO - 🔍 download_video 开始处理URL: https://youtu.be/rIcd5zZqTno?si=OABgizCU5xM6Cl9I
+2026-04-02 16:31:41 - savextube - INFO - 🔍 自动下载全集模式: 关闭
+2026-04-02 16:32:18 - modules.config.toml_config - INFO - 📖 正在读取配置文件: savextube.toml
+2026-04-02 16:32:18 - modules.config.toml_config - INFO - ✅ 成功读取配置文件，包含 10 个配置段
+2026-04-02 16:32:18 - modules.config.toml_config - INFO -    📁 配置段: telegram
+2026-04-02 16:32:18 - modules.config.toml_config - INFO -    📁 配置段: proxy
+2026-04-02 16:32:18 - modules.config.toml_config - INFO -    📁 配置段: netease
+2026-04-02 16:32:18 - modules.config.toml_config - INFO -    📁 配置段: apple_music
+2026-04-02 16:32:18 - modules.config.toml_config - INFO -    📁 配置段: bilibili
+2026-04-02 16:32:18 - modules.config.toml_config - INFO -    📁 配置段: qbittorrent
+2026-04-02 16:32:18 - modules.config.toml_config - INFO -    📁 配置段: logging
+2026-04-02 16:32:18 - modules.config.toml_config - INFO -    📁 配置段: youtube
+2026-04-02 16:32:18 - modules.config.toml_config - INFO -    📁 配置段: multithread
+2026-04-02 16:32:18 - modules.config.toml_config - INFO -    📁 配置段: download_queue
+2026-04-02 16:32:18 - modules.downloaders.multithread_downloader - WARNING - ⚠️ aria2c 未安装，将使用 yt-dlp 内置下载
+2026-04-02 16:32:18 - modules.downloaders.multithread_downloader - INFO - 💡 安装 aria2c 可以获得更快的下载速度：
+2026-04-02 16:32:18 - modules.downloaders.multithread_downloader - INFO -    Ubuntu/Debian: sudo apt install aria2
+2026-04-02 16:32:18 - modules.downloaders.multithread_downloader - INFO -    CentOS/RHEL: sudo yum install aria2
+2026-04-02 16:32:18 - modules.downloaders.multithread_downloader - INFO -    macOS: brew install aria2
+2026-04-02 16:32:18 - savextube - INFO - ✅ 多线程下载器初始化成功（线程数：16, 并发数：3）
+2026-04-02 16:32:18 - savextube - INFO - ✅ 模块化下载器初始化成功
+2026-04-02 16:32:18 - modules.downloaders.instagram_downloader - WARNING - ⚠️ Instagram cookies 文件不存在: /app/cookies/instagram_cookies.txt
+2026-04-02 16:32:18 - modules.downloaders.instagram_downloader - ERROR - ❌ gallery-dl 未安装或不可用
+2026-04-02 16:32:18 - savextube - INFO - ✅ Instagram 下载器初始化成功
+2026-04-02 16:32:18 - modules.downloaders.applemusic_downloader - INFO - 🐳 检测到 Docker 环境，启用特殊优化
+2026-04-02 16:32:18 - modules.downloaders.applemusic_downloader - ERROR - ❌ gamdl 未安装或不可用
+2026-04-02 16:32:18 - modules.downloaders.applemusic_downloader - INFO - 💡 请安装 gamdl: pip install gamdl
+2026-04-02 16:32:18 - savextube - WARNING - ⚠️ Apple Music 下载器初始化失败：gamdl 不可用
+2026-04-02 16:32:18 - savextube - INFO - 视频格式转换: 开启
+2026-04-02 16:32:18 - savextube - INFO - X 下载路径: D:\MyProjects\savextube\downloads\X
+2026-04-02 16:32:18 - savextube - INFO - YouTube 下载路径: D:\MyProjects\savextube\downloads\YouTube
+2026-04-02 16:32:18 - savextube - INFO - Xvideos 下载路径: D:\MyProjects\savextube\downloads\Xvideos
+2026-04-02 16:32:18 - savextube - INFO - Pornhub 下载路径: D:\MyProjects\savextube\downloads\Pornhub
+2026-04-02 16:32:18 - savextube - INFO - Bilibili 下载路径: D:\MyProjects\savextube\downloads\Bilibili
+2026-04-02 16:32:18 - savextube - INFO - 音乐下载路径: D:\MyProjects\savextube\downloads\Music
+2026-04-02 16:32:18 - savextube - INFO - Telegram 文件下载路径: D:\MyProjects\savextube\downloads\Telegram
+2026-04-02 16:32:18 - savextube - INFO - Telegraph 文件下载路径: D:\MyProjects\savextube\downloads\Telegraph
+2026-04-02 16:32:18 - savextube - INFO - 抖音下载路径: D:\MyProjects\savextube\downloads\Douyin
+2026-04-02 16:32:18 - savextube - INFO - 快手下载路径: D:\MyProjects\savextube\downloads\Kuaishou
+2026-04-02 16:32:18 - savextube - INFO - Facebook下载路径: D:\MyProjects\savextube\downloads\Facebook
+2026-04-02 16:32:18 - savextube - INFO - 小红书下载路径: D:\MyProjects\savextube\downloads\Xiaohongshu
+2026-04-02 16:32:18 - savextube - INFO - 微博下载路径: D:\MyProjects\savextube\downloads\Weibo
+2026-04-02 16:32:18 - savextube - INFO - Instagram下载路径: D:\MyProjects\savextube\downloads\Instagram
+2026-04-02 16:32:18 - savextube - INFO - TikTok下载路径: D:\MyProjects\savextube\downloads\TikTok
+2026-04-02 16:32:18 - savextube - INFO - 网易云音乐下载路径: D:\MyProjects\savextube\downloads\NeteaseCloudMusic
+2026-04-02 16:32:18 - savextube - INFO - QQ音乐下载路径: D:\MyProjects\savextube\downloads\QQMusic
+2026-04-02 16:32:18 - savextube - INFO - YouTube Music下载路径: \downloads\YouTubeMusic
+2026-04-02 16:32:18 - savextube - INFO - Apple Music下载路径: D:\MyProjects\savextube\downloads\AppleMusic
+2026-04-02 16:32:18 - savextube - INFO - 代理服务器未配置，将直接连接
+2026-04-02 16:32:18 - savextube - INFO - yt-dlp 直接连接
+2026-04-02 16:32:18 - savextube - INFO - ⚠️ 未设置 GALLERY_DL_DOWNLOAD_PATH 环境变量，使用默认值: D:\MyProjects\savextube\downloads\gallery
+2026-04-02 16:32:18 - savextube - INFO - 🎯 使用 GALLERY_DL_DOWNLOAD_PATH: D:\MyProjects\savextube\downloads\gallery
+2026-04-02 16:32:18 - savextube - INFO - 🍪 使用初始化参数中的X cookies: None
+2026-04-02 16:32:18 - savextube - INFO - 已成功创建 gallery-dl.conf 配置文件: D:\MyProjects\savextube\downloads\gallery-dl.conf
+2026-04-02 16:32:18 - savextube - INFO - 配置文件内容:
+{
+  "base-directory": "D:\\MyProjects\\savextube\\downloads\\gallery",
+  "extractor": {
+    "twitter": {
+      "cookies": null
+    }
+  },
+  "downloader": {
+    "http": {
+      "timeout": 120,
+      "retries": 15,
+      "sleep": 5,
+      "verify": false,
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br",
+        "DNT": "1",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "cross-site",
+        "Sec-Fetch-User": "?1",
+        "Cache-Control": "max-age=0",
+        "Referer": "https://telegra.ph/",
+        "Origin": "https://telegra.ph"
+      },
+      "max_retries": 15,
+      "retry_delay": 5,
+      "connection_timeout": 60,
+      "read_timeout": 120,
+      "chunk_size": 8192,
+      "stream": true,
+      "allow_redirects": true,
+      "max_redirects": 10
+    }
+  }
+}
+2026-04-02 16:32:18 - netease_downloader - WARNING - ⚠️ 未找到网易云cookies配置
+2026-04-02 16:32:18 - netease_downloader - WARNING - 💡 请设置环境变量:
+2026-04-02 16:32:18 - netease_downloader - WARNING -    NCM_COOKIE_FILE=/path/to/ncm_cookies.txt
+2026-04-02 16:32:18 - netease_downloader - WARNING -    或 NCM_COOKIES='MUSIC_U=xxx; __csrf=xxx'
+2026-04-02 16:32:18 - netease_downloader - WARNING - 📝 将使用游客模式，可能无法下载受版权保护的音乐
+2026-04-02 16:32:18 - netease_downloader - INFO - 🔧 元数据初始化: METADATA_AVAILABLE = True
+2026-04-02 16:32:18 - modules.downloaders.music_metadata - INFO - ✅ 检测到 mutagen 库
+2026-04-02 16:32:18 - modules.downloaders.music_metadata - INFO - ✅ 检测到 eyed3 库
+2026-04-02 16:32:18 - modules.downloaders.music_metadata - INFO - ✅ 检测到 tinytag 库（只读）
+2026-04-02 16:32:18 - modules.downloaders.music_metadata - INFO - 🔧 可用的音频标签库: mutagen, eyed3, tinytag
+2026-04-02 16:32:18 - netease_downloader - INFO - ✅ 音乐元数据管理器初始化成功
+2026-04-02 16:32:18 - netease_downloader - INFO - 🔧 可用的音频标签库: mutagen, eyed3, tinytag
+2026-04-02 16:32:18 - netease_downloader - INFO - 🎤 歌词下载功能已启用
+2026-04-02 16:32:18 - netease_downloader - INFO - 🔧 网易云音乐配置:
+2026-04-02 16:32:18 - netease_downloader - INFO -   - 目录结构格式: {AlbumName}
+2026-04-02 16:32:18 - netease_downloader - INFO -   - 专辑文件夹格式: {AlbumName}
+2026-04-02 16:32:18 - netease_downloader - INFO -   - 歌曲文件名格式: {SongName}
+2026-04-02 16:32:18 - netease_downloader - INFO - 支持的占位符:
+2026-04-02 16:32:18 - netease_downloader - INFO -   - 目录结构: {ArtistName}, {AlbumName}
+2026-04-02 16:32:18 - netease_downloader - INFO -   - 专辑文件夹: {AlbumName}, {ReleaseDate}
+2026-04-02 16:32:18 - netease_downloader - INFO -   - 歌曲文件名: {SongNumber}, {ArtistName}, {SongName}
+2026-04-02 16:32:18 - savextube - INFO - 🎵 网易云音乐下载器初始化成功 (模块: d:\MyProjects\savextube\modules\downloaders\neteasecloud_music.py)
+2026-04-02 16:32:18 - savextube - INFO - 🎵 QQ音乐下载器初始化成功 (模块: qqmusic_downloader.py)
+2026-04-02 16:32:18 - modules.downloaders.music_metadata - INFO - ✅ 检测到 mutagen 库
+2026-04-02 16:32:18 - modules.downloaders.music_metadata - INFO - ✅ 检测到 eyed3 库
+2026-04-02 16:32:18 - modules.downloaders.music_metadata - INFO - ✅ 检测到 tinytag 库（只读）
+2026-04-02 16:32:18 - modules.downloaders.music_metadata - INFO - 🔧 可用的音频标签库: mutagen, eyed3, tinytag
+2026-04-02 16:32:18 - youtube_music_downloader - INFO - ✅ 音乐元数据管理器初始化成功
+2026-04-02 16:32:18 - youtube_music_downloader - WARNING - ⚠️ 未找到 YouTube cookies 文件，某些受限内容可能无法下载
+2026-04-02 16:32:18 - youtube_music_downloader - INFO - 🎵 YouTube Music 下载器初始化完成
+2026-04-02 16:32:18 - youtube_music_downloader - INFO - 🔧 配置: 并发=3, 重试=3, 超时=300s
+2026-04-02 16:32:18 - youtube_music_downloader - INFO - 🎯 音质: best, ID标签: False
+2026-04-02 16:32:18 - savextube - INFO - 🎵 YouTube Music下载器初始化成功 (模块: youtubemusic_downloader.py)
+2026-04-02 16:32:35 - modules.config.toml_config - INFO - 📖 正在读取配置文件: savextube.toml
+2026-04-02 16:32:35 - modules.config.toml_config - INFO - ✅ 成功读取配置文件，包含 10 个配置段
+2026-04-02 16:32:35 - modules.config.toml_config - INFO -    📁 配置段: telegram
+2026-04-02 16:32:35 - modules.config.toml_config - INFO -    📁 配置段: proxy
+2026-04-02 16:32:35 - modules.config.toml_config - INFO -    📁 配置段: netease
+2026-04-02 16:32:35 - modules.config.toml_config - INFO -    📁 配置段: apple_music
+2026-04-02 16:32:35 - modules.config.toml_config - INFO -    📁 配置段: bilibili
+2026-04-02 16:32:35 - modules.config.toml_config - INFO -    📁 配置段: qbittorrent
+2026-04-02 16:32:35 - modules.config.toml_config - INFO -    📁 配置段: logging
+2026-04-02 16:32:35 - modules.config.toml_config - INFO -    📁 配置段: youtube
+2026-04-02 16:32:35 - modules.config.toml_config - INFO -    📁 配置段: multithread
+2026-04-02 16:32:35 - modules.config.toml_config - INFO -    📁 配置段: download_queue
+2026-04-02 16:32:35 - modules.downloaders.multithread_downloader - WARNING - ⚠️ aria2c 未安装，将使用 yt-dlp 内置下载
+2026-04-02 16:32:35 - modules.downloaders.multithread_downloader - INFO - 💡 安装 aria2c 可以获得更快的下载速度：
+2026-04-02 16:32:35 - modules.downloaders.multithread_downloader - INFO -    Ubuntu/Debian: sudo apt install aria2
+2026-04-02 16:32:35 - modules.downloaders.multithread_downloader - INFO -    CentOS/RHEL: sudo yum install aria2
+2026-04-02 16:32:35 - modules.downloaders.multithread_downloader - INFO -    macOS: brew install aria2
+2026-04-02 16:32:35 - savextube - INFO - ✅ 多线程下载器初始化成功（线程数：16, 并发数：3）
+2026-04-02 16:32:35 - savextube - INFO - ✅ 模块化下载器初始化成功
+2026-04-02 16:32:35 - modules.downloaders.instagram_downloader - WARNING - ⚠️ Instagram cookies 文件不存在: /app/cookies/instagram_cookies.txt
+2026-04-02 16:32:35 - modules.downloaders.instagram_downloader - ERROR - ❌ gallery-dl 未安装或不可用
+2026-04-02 16:32:35 - savextube - INFO - ✅ Instagram 下载器初始化成功
+2026-04-02 16:32:35 - modules.downloaders.applemusic_downloader - INFO - 🐳 检测到 Docker 环境，启用特殊优化
+2026-04-02 16:32:35 - modules.downloaders.applemusic_downloader - ERROR - ❌ gamdl 未安装或不可用
+2026-04-02 16:32:35 - modules.downloaders.applemusic_downloader - INFO - 💡 请安装 gamdl: pip install gamdl
+2026-04-02 16:32:35 - savextube - WARNING - ⚠️ Apple Music 下载器初始化失败：gamdl 不可用
+2026-04-02 16:32:35 - savextube - INFO - 视频格式转换: 开启
+2026-04-02 16:32:35 - savextube - INFO - X 下载路径: D:\MyProjects\savextube\downloads\X
+2026-04-02 16:32:35 - savextube - INFO - YouTube 下载路径: D:\MyProjects\savextube\downloads\YouTube
+2026-04-02 16:32:35 - savextube - INFO - Xvideos 下载路径: D:\MyProjects\savextube\downloads\Xvideos
+2026-04-02 16:32:35 - savextube - INFO - Pornhub 下载路径: D:\MyProjects\savextube\downloads\Pornhub
+2026-04-02 16:32:35 - savextube - INFO - Bilibili 下载路径: D:\MyProjects\savextube\downloads\Bilibili
+2026-04-02 16:32:35 - savextube - INFO - 音乐下载路径: D:\MyProjects\savextube\downloads\Music
+2026-04-02 16:32:35 - savextube - INFO - Telegram 文件下载路径: D:\MyProjects\savextube\downloads\Telegram
+2026-04-02 16:32:35 - savextube - INFO - Telegraph 文件下载路径: D:\MyProjects\savextube\downloads\Telegraph
+2026-04-02 16:32:35 - savextube - INFO - 抖音下载路径: D:\MyProjects\savextube\downloads\Douyin
+2026-04-02 16:32:35 - savextube - INFO - 快手下载路径: D:\MyProjects\savextube\downloads\Kuaishou
+2026-04-02 16:32:35 - savextube - INFO - Facebook下载路径: D:\MyProjects\savextube\downloads\Facebook
+2026-04-02 16:32:35 - savextube - INFO - 小红书下载路径: D:\MyProjects\savextube\downloads\Xiaohongshu
+2026-04-02 16:32:35 - savextube - INFO - 微博下载路径: D:\MyProjects\savextube\downloads\Weibo
+2026-04-02 16:32:35 - savextube - INFO - Instagram下载路径: D:\MyProjects\savextube\downloads\Instagram
+2026-04-02 16:32:35 - savextube - INFO - TikTok下载路径: D:\MyProjects\savextube\downloads\TikTok
+2026-04-02 16:32:35 - savextube - INFO - 网易云音乐下载路径: D:\MyProjects\savextube\downloads\NeteaseCloudMusic
+2026-04-02 16:32:35 - savextube - INFO - QQ音乐下载路径: D:\MyProjects\savextube\downloads\QQMusic
+2026-04-02 16:32:35 - savextube - INFO - YouTube Music下载路径: \downloads\YouTubeMusic
+2026-04-02 16:32:35 - savextube - INFO - Apple Music下载路径: D:\MyProjects\savextube\downloads\AppleMusic
+2026-04-02 16:32:35 - savextube - INFO - 代理服务器未配置，将直接连接
+2026-04-02 16:32:35 - savextube - INFO - yt-dlp 直接连接
+2026-04-02 16:32:35 - savextube - INFO - ⚠️ 未设置 GALLERY_DL_DOWNLOAD_PATH 环境变量，使用默认值: D:\MyProjects\savextube\downloads\gallery
+2026-04-02 16:32:35 - savextube - INFO - 🎯 使用 GALLERY_DL_DOWNLOAD_PATH: D:\MyProjects\savextube\downloads\gallery
+2026-04-02 16:32:35 - savextube - INFO - 🍪 使用初始化参数中的X cookies: None
+2026-04-02 16:32:35 - savextube - INFO - 已成功创建 gallery-dl.conf 配置文件: D:\MyProjects\savextube\downloads\gallery-dl.conf
+2026-04-02 16:32:35 - savextube - INFO - 配置文件内容:
+{
+  "base-directory": "D:\\MyProjects\\savextube\\downloads\\gallery",
+  "extractor": {
+    "twitter": {
+      "cookies": null
+    }
+  },
+  "downloader": {
+    "http": {
+      "timeout": 120,
+      "retries": 15,
+      "sleep": 5,
+      "verify": false,
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br",
+        "DNT": "1",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "cross-site",
+        "Sec-Fetch-User": "?1",
+        "Cache-Control": "max-age=0",
+        "Referer": "https://telegra.ph/",
+        "Origin": "https://telegra.ph"
+      },
+      "max_retries": 15,
+      "retry_delay": 5,
+      "connection_timeout": 60,
+      "read_timeout": 120,
+      "chunk_size": 8192,
+      "stream": true,
+      "allow_redirects": true,
+      "max_redirects": 10
+    }
+  }
+}
+2026-04-02 16:32:35 - netease_downloader - WARNING - ⚠️ 未找到网易云cookies配置
+2026-04-02 16:32:35 - netease_downloader - WARNING - 💡 请设置环境变量:
+2026-04-02 16:32:35 - netease_downloader - WARNING -    NCM_COOKIE_FILE=/path/to/ncm_cookies.txt
+2026-04-02 16:32:35 - netease_downloader - WARNING -    或 NCM_COOKIES='MUSIC_U=xxx; __csrf=xxx'
+2026-04-02 16:32:35 - netease_downloader - WARNING - 📝 将使用游客模式，可能无法下载受版权保护的音乐
+2026-04-02 16:32:35 - netease_downloader - INFO - 🔧 元数据初始化: METADATA_AVAILABLE = True
+2026-04-02 16:32:35 - modules.downloaders.music_metadata - INFO - ✅ 检测到 mutagen 库
+2026-04-02 16:32:35 - modules.downloaders.music_metadata - INFO - ✅ 检测到 eyed3 库
+2026-04-02 16:32:35 - modules.downloaders.music_metadata - INFO - ✅ 检测到 tinytag 库（只读）
+2026-04-02 16:32:35 - modules.downloaders.music_metadata - INFO - 🔧 可用的音频标签库: mutagen, eyed3, tinytag
+2026-04-02 16:32:35 - netease_downloader - INFO - ✅ 音乐元数据管理器初始化成功
+2026-04-02 16:32:35 - netease_downloader - INFO - 🔧 可用的音频标签库: mutagen, eyed3, tinytag
+2026-04-02 16:32:35 - netease_downloader - INFO - 🎤 歌词下载功能已启用
+2026-04-02 16:32:35 - netease_downloader - INFO - 🔧 网易云音乐配置:
+2026-04-02 16:32:35 - netease_downloader - INFO -   - 目录结构格式: {AlbumName}
+2026-04-02 16:32:35 - netease_downloader - INFO -   - 专辑文件夹格式: {AlbumName}
+2026-04-02 16:32:35 - netease_downloader - INFO -   - 歌曲文件名格式: {SongName}
+2026-04-02 16:32:35 - netease_downloader - INFO - 支持的占位符:
+2026-04-02 16:32:35 - netease_downloader - INFO -   - 目录结构: {ArtistName}, {AlbumName}
+2026-04-02 16:32:35 - netease_downloader - INFO -   - 专辑文件夹: {AlbumName}, {ReleaseDate}
+2026-04-02 16:32:35 - netease_downloader - INFO -   - 歌曲文件名: {SongNumber}, {ArtistName}, {SongName}
+2026-04-02 16:32:35 - savextube - INFO - 🎵 网易云音乐下载器初始化成功 (模块: d:\MyProjects\savextube\modules\downloaders\neteasecloud_music.py)
+2026-04-02 16:32:35 - savextube - INFO - 🎵 QQ音乐下载器初始化成功 (模块: qqmusic_downloader.py)
+2026-04-02 16:32:35 - modules.downloaders.music_metadata - INFO - ✅ 检测到 mutagen 库
+2026-04-02 16:32:35 - modules.downloaders.music_metadata - INFO - ✅ 检测到 eyed3 库
+2026-04-02 16:32:35 - modules.downloaders.music_metadata - INFO - ✅ 检测到 tinytag 库（只读）
+2026-04-02 16:32:35 - modules.downloaders.music_metadata - INFO - 🔧 可用的音频标签库: mutagen, eyed3, tinytag
+2026-04-02 16:32:35 - youtube_music_downloader - INFO - ✅ 音乐元数据管理器初始化成功
+2026-04-02 16:32:35 - youtube_music_downloader - WARNING - ⚠️ 未找到 YouTube cookies 文件，某些受限内容可能无法下载
+2026-04-02 16:32:35 - youtube_music_downloader - INFO - 🎵 YouTube Music 下载器初始化完成
+2026-04-02 16:32:35 - youtube_music_downloader - INFO - 🔧 配置: 并发=3, 重试=3, 超时=300s
+2026-04-02 16:32:35 - youtube_music_downloader - INFO - 🎯 音质: best, ID标签: False
+2026-04-02 16:32:35 - savextube - INFO - 🎵 YouTube Music下载器初始化成功 (模块: youtubemusic_downloader.py)

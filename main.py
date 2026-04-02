@@ -2733,6 +2733,14 @@ class VideoDownloader:
             logger=logger,
         )
         ydl_opts = enrich_single_video_ydl_options(self, url=url, ydl_opts=ydl_opts, logger=logger)
+        is_youtube_single = self.is_youtube_url(url)
+        if is_youtube_single:
+            now_ts = time.time()
+            bypass_until = float(getattr(self, "_youtube_cookie_bypass_until", 0) or 0)
+            if bypass_until > now_ts and ydl_opts.get("cookiefile"):
+                ydl_opts.pop("cookiefile", None)
+                remain_sec = int(bypass_until - now_ts)
+                logger.info(f"⏭️ YouTube cookies 暂时跳过（近期风控命中，剩余 {remain_sec}s）")
 
         # 应用多线程下载优化（aria2c / 并发分片）
         mt = getattr(self, "multithread_downloader", None)
@@ -2769,7 +2777,15 @@ class VideoDownloader:
         if not download_result.get("success"):
             return {"success": False, "error": download_result.get("error", "下载失败")}
 
-        return build_single_video_download_result(
+        if is_youtube_single:
+            hinted_until = progress_data.get("youtube_cookie_bypass_recommended_until")
+            if isinstance(hinted_until, (int, float)):
+                current_until = float(getattr(self, "_youtube_cookie_bypass_until", 0) or 0)
+                if hinted_until > current_until:
+                    self._youtube_cookie_bypass_until = hinted_until
+                    logger.info(f"🧠 记录 YouTube cookies 跳过窗口至 {int(hinted_until)}")
+
+        result = build_single_video_download_result(
             self,
             download_path=download_path,
             progress_data=progress_data,
@@ -2777,6 +2793,54 @@ class VideoDownloader:
             url=url,
             logger=logger,
         )
+
+        if (
+            is_youtube_single
+            and result.get("success")
+            and not progress_data.get("quality_retry_attempted")
+        ):
+            resolution = str(result.get("resolution", ""))
+            m = re.search(r"x(\d+)$", resolution)
+            current_height = int(m.group(1)) if m else 0
+
+            if 0 < current_height < 720:
+                progress_data["quality_retry_attempted"] = True
+                logger.warning(f"⚠️ YouTube 当前分辨率较低({resolution})，尝试补救性高清重试一次")
+
+                quality_retry_opts = dict(ydl_opts)
+                quality_retry_opts["format"] = "bestvideo+bestaudio/best"
+                quality_retry_opts["format_sort"] = ["res:1080", "fps", "vcodec:h264"]
+                quality_retry_opts["progress_hooks"] = [progress_hook]
+
+                quality_retry_result = await run_single_video_download(
+                    url=url,
+                    ydl_opts=quality_retry_opts,
+                    progress_data=progress_data,
+                    yt_dlp_module=yt_dlp,
+                    logger=logger,
+                )
+
+                if quality_retry_result.get("success"):
+                    improved_result = build_single_video_download_result(
+                        self,
+                        download_path=download_path,
+                        progress_data=progress_data,
+                        title=title,
+                        url=url,
+                        logger=logger,
+                    )
+                    improved_resolution = str(improved_result.get("resolution", ""))
+                    m2 = re.search(r"x(\d+)$", improved_resolution)
+                    improved_height = int(m2.group(1)) if m2 else 0
+
+                    if improved_height > current_height:
+                        improved_result["quality_retry"] = True
+                        logger.info(f"✅ 高清补救成功: {resolution} -> {improved_resolution}")
+                        return improved_result
+
+                    logger.info(f"ℹ️ 高清补救未提升分辨率，保留原结果: {resolution}")
+
+        return result
 
 
 

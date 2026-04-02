@@ -68,6 +68,11 @@ RUN apt-get update && apt-get install -y --fix-missing \
     aria2 \
     && rm -rf /var/lib/apt/lists/*
 
+RUN apt-get update && apt-get install -y --fix-missing \
+    nodejs \
+    npm \
+    && rm -rf /var/lib/apt/lists/*
+
 # 复制依赖文件
 COPY requirements.txt .
 

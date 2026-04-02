@@ -55,7 +55,7 @@ async def prepare_single_video_title(downloader, *, url: str, logger, yt_dlp_mod
 
         if downloader.proxy_host:
             info_opts["proxy"] = downloader.proxy_host
-            logger.info(f"🌐 使用代理: {downloader.proxy_host}")
+            logger.info(f"🌪 使用代理: {downloader.proxy_host}")
 
         if (
             downloader.is_x_url(url)
@@ -65,6 +65,15 @@ async def prepare_single_video_title(downloader, *, url: str, logger, yt_dlp_mod
             info_opts["cookiefile"] = downloader.x_cookies_path
             logger.info(f"🍪 使用X cookies: {downloader.x_cookies_path}")
 
+        if downloader.is_youtube_url(url):
+            info_opts["extractor_args"] = {
+                "youtube": {
+                    "player_client": ["android", "ios", "web", "mweb"],
+                    "player_skip": ["configs", "webpage"],
+                    "formats": ["missing_pot"],
+                }
+            }
+
         if (
             downloader.is_youtube_url(url)
             and downloader.youtube_cookies_path
@@ -72,6 +81,9 @@ async def prepare_single_video_title(downloader, *, url: str, logger, yt_dlp_mod
         ):
             info_opts["cookiefile"] = downloader.youtube_cookies_path
             logger.info(f"🍪 使用YouTube cookies: {downloader.youtube_cookies_path}")
+        elif downloader.is_youtube_url(url) and downloader.youtube_cookies_path:
+            logger.warning(f"⚠️ YouTube cookies 文件未找到: {downloader.youtube_cookies_path}")
+            logger.warning("⚠️ 需要登录的视频可能仍然无法下载，确认文件已挂载到容器或路径配置正确")
 
         if (
             downloader.is_douyin_url(url)
@@ -99,7 +111,7 @@ async def prepare_single_video_title(downloader, *, url: str, logger, yt_dlp_mod
 
         def extract_video_info():
             with yt_dlp_module.YoutubeDL(info_opts) as ydl:
-                logger.info("📡 正在从平台获取视频数据...")
+                logger.info("🔗 正在从平台获取视频数据...")
                 return ydl.extract_info(url, download=False)
 
         try:
@@ -108,15 +120,26 @@ async def prepare_single_video_title(downloader, *, url: str, logger, yt_dlp_mod
             )
             logger.info(f"✅ 视频信息获取完成，数据类型: {type(info)}")
 
-            video_id = info.get("id")
-            title = info.get("title")
-            if title:
-                title = downloader._sanitize_filename(title)
+            if info and isinstance(info, dict):
+                video_id = info.get("id")
+                title = info.get("title")
+                if title:
+                    title = downloader._sanitize_filename(title)
+                else:
+                    title = downloader._sanitize_filename(video_id)
+                logger.info(f"📑 视频标题: {title}")
+                logger.info(f"🆔 视频ID: {video_id}")
+                return {"ok": True, "title": title}
             else:
-                title = downloader._sanitize_filename(video_id)
-            logger.info(f"📝 视频标题: {title}")
-            logger.info(f"🆔 视频ID: {video_id}")
-            return {"ok": True, "title": title}
+                logger.warning(
+                    "⚠️ yt-dlp 未返回有效的视频信息(info=None 或类型无效)，将使用 URL 片段或时间戳作为标题"
+                )
+                fallback_title = downloader._sanitize_filename(
+                    url.split("/")[-1].split("?")[0] or str(int(time.time()))
+                )
+                fallback_title = fallback_title or downloader._sanitize_filename(str(int(time.time())))
+                logger.info(f"📑 备用标题: {fallback_title}")
+                return {"ok": True, "title": fallback_title}
         except asyncio.TimeoutError:
             logger.error("❌ 获取视频信息超时（60秒）")
             return {
@@ -129,5 +152,5 @@ async def prepare_single_video_title(downloader, *, url: str, logger, yt_dlp_mod
     except Exception as e:
         logger.error(f"❌ 无法预先获取视频信息: {e}")
         title = downloader._sanitize_filename(str(int(time.time())))
-        logger.info(f"📝 使用时间戳作为标题: {title}")
+        logger.info(f"📑 使用时间戳作为标题: {title}")
         return {"ok": True, "title": title}
