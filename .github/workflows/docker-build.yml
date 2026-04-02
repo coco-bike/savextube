@@ -30,6 +30,6 @@ jobs:
           push: true
           tags: |
             ${{ env.IMAGE_NAME }}:latest
-            ${{ env.IMAGE_NAME }}:v1.3
+            ${{ env.IMAGE_NAME }}:v1.4
           cache-from: type=gha
           cache-to: type=gha,mode=max
