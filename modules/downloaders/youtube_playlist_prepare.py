@@ -44,15 +44,15 @@ async def prepare_youtube_playlist_download_context(
         "ignoreerrors": True,
         "socket_timeout": 60,
         "retries": 3,
+        "js_runtimes": {"node": {}},
         "age_limit": 99,
         "geo_bypass": True,
         "geo_bypass_country": "US",
         "extractor_args": {
             "youtube": {
-                "player_client": ["ios", "mweb"],
+                "player_client": ["android", "ios", "web", "mweb"],
                 "player_skip": ["configs", "webpage"],
                 "include_dash_manifest": True,
-                "formats": "missing_pot",
             }
         },
     }

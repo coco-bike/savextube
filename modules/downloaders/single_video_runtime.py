@@ -103,14 +103,13 @@ async def run_single_video_download(
             )
 
             if should_retry:
-                logger.warning("⚠️ 触发YouTube格式回退：改用 format=best 重试一次")
+                logger.warning("⚠️ 触发YouTube格式回退：优先使用 bestvideo+bestaudio 重试一次")
                 retry_opts = copy.deepcopy(ydl_opts)
-                retry_opts["format"] = "best"
+                retry_opts["format"] = "bestvideo+bestaudio/best"
                 retry_opts["extractor_args"] = {
                     "youtube": {
                         "player_client": ["android", "ios", "web", "mweb"],
                         "player_skip": ["configs", "webpage"],
-                        "formats": ["missing_pot"],
                     }
                 }
                 try:
@@ -133,6 +132,7 @@ async def run_single_video_download(
                         logger.warning("⚠️ 检测到YouTube登录态令牌问题，移除 cookies 后再重试一次")
                         no_cookie_opts = copy.deepcopy(retry_opts)
                         no_cookie_opts.pop("cookiefile", None)
+                        no_cookie_opts["format"] = "bestvideo+bestaudio/best"
                         no_cookie_opts["extractor_args"] = {
                             "youtube": {
                                 "player_client": ["android", "web", "mweb"],

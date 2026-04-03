@@ -66,11 +66,11 @@ async def prepare_single_video_title(downloader, *, url: str, logger, yt_dlp_mod
             logger.info(f"🍪 使用X cookies: {downloader.x_cookies_path}")
 
         if downloader.is_youtube_url(url):
+            info_opts["js_runtimes"] = {"node": {}}
             info_opts["extractor_args"] = {
                 "youtube": {
                     "player_client": ["android", "ios", "web", "mweb"],
                     "player_skip": ["configs", "webpage"],
-                    "formats": ["missing_pot"],
                 }
             }
 

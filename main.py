@@ -4373,6 +4373,7 @@ class VideoDownloader:
             # 基础配置
             'quiet': False,
             'no_warnings': False,
+            'js_runtimes': {'node': {}},
 
             # 网络和重试配置 - 避免网络中断导致的PART文件
             'socket_timeout': 60,           # 增加超时时间到60秒

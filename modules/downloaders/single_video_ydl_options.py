@@ -114,6 +114,7 @@ def build_single_video_ydl_options(downloader, *, url: str, outtmpl: str, no_pla
         "outtmpl": outtmpl,
         "format": format_spec,
         "merge_output_format": merge_format,
+        "js_runtimes": {"node": {}},
         "noplaylist": noplaylist_setting,
         "nocheckcertificate": True,
         # 单视频必须显式暴露失败，避免误判成功后再进入“找不到文件”

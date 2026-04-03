@@ -57,6 +57,7 @@ async def download_with_ytdlp_unified_runtime(
                 'outtmpl': os.path.join(str(download_path), outtmpl),
                 'verbose': False,
                 'no_warnings': True,
+                'js_runtimes': {'node': {}},
                 'extract_flat': False,
                 'ignoreerrors': False,
                 'no_check_certificate': True,
